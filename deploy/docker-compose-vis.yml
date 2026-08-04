@@ -1,0 +1,19 @@
+services:
+  redisinsight:
+    image: docker.m.daocloud.io/redis/redisinsight:latest
+    container_name: aw-redisinsight
+    ports:
+      - "5540:5540"
+    volumes:
+      - D:\DockerData\SmartAgent\redisinsight:/data
+    restart: no
+
+  pgadmin:
+    image: docker.m.daocloud.io/dpage/pgadmin4:latest
+    container_name: aw-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    restart: no

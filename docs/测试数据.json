@@ -1,0 +1,25 @@
+{
+  "项目名称": "TaskBench - 智能任务自动化工作台",
+  "开发周期": "2026年6月 - 2026年7月",
+  "团队成员": [
+    {"姓名": "张三", "角色": "后端开发", "模块": ["FastAPI", "Agent引擎", "数据库"]},
+    {"姓名": "李四", "角色": "前端开发", "模块": ["Vue 3", "WebSocket", "Dashboard"]},
+    {"姓名": "王五", "角色": "算法工程师", "模块": ["LLM接入", "RAG", "工具链"]}
+  ],
+  "技术指标": {
+    "Agent工具数量": 11,
+    "支持文件格式": ["txt", "md", "pdf", "docx", "json", "csv"],
+    "向量检索速度": "<200ms",
+    "WebSocket首字延迟": "<300ms",
+    "任务并发处理": "Celery异步队列"
+  },
+  "API端点": [
+    "POST /auth/register",
+    "POST /auth/login",
+    "POST /tasks/",
+    "GET  /tasks/",
+    "WS   /chat/ws",
+    "POST /knowledge/add",
+    "GET  /knowledge/search"
+  ]
+}

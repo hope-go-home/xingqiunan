@@ -1,0 +1,19 @@
+fastapi>=0.110
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+aiofiles
+python-dotenv
+pydantic-settings
+pyjwt
+passlib[bcrypt]
+langchain-openai
+langchain-core
+psycopg2-binary
+chromadb
+celery[redis]
+redis
+python-multipart
+# 可选：文档解析增强
+# PyMuPDF          # PDF 解析 (pip install PyMuPDF)
+# python-docx      # Word 解析 (pip install python-docx)

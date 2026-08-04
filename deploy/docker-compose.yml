@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:16
+    container_name: aw-postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agent_workbench
+    ports:
+      - "5432:5432"
+    volumes:
+      - aw-postgres:/var/lib/postgresql/data
+    restart: no
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7.2
+    container_name: aw-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - D:\DockerData\SmartAgent\redis:/data
+    command: redis-server --appendonly yes --requirepass 123456
+    restart: no
+
+volumes:
+  aw-postgres:
