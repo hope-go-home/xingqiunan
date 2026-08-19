@@ -67,11 +67,11 @@ def test_build_tools_schemas_intact():
 
 
 def test_audited_tools_record_real_calls(audit_dir, tmp_path, monkeypatch):
-    """真实调用带审计装饰器的工具会落审计"""
+    """真实调用带审计装饰器的工具会落审计（用无外部依赖的工具，CI 无密钥也能跑）"""
     import app.agents.tools as t
     monkeypatch.setattr(t, "LOG_DIR", str(audit_dir))
     tools_map = {x.name: x for x in tools.build_tools(7)}
-    out = tools_map["translate"].invoke({"text": "hello", "target_lang": "中文"})
+    out = tools_map["list_workspace"].invoke({"dir_path": "."})
     assert isinstance(out, str) and out
     recs = _read_audit(audit_dir)
-    assert any(r["tool"] == "translate" and r["user_id"] == 7 for r in recs)
+    assert any(r["tool"] == "list_workspace" and r["user_id"] == 7 for r in recs)
