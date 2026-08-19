@@ -187,13 +187,11 @@ class McpAgent:
         history: list[dict] | None = None,
         on_event: Callable[[dict], None] | None = None,
         planning: bool | None = None,
-        role: str = "user",
     ) -> str:
         """同步入口：返回最终回答文本；on_event 回调会收到工具调用/回答分片/token 用量事件。
-        planning: True=强制长程规划，False=关闭，None=跟随全局 PLANNING_ENABLED
-        role: 用户角色，admin 拥有高危工具（删除/移动/执行命令），普通用户自动过滤"""
+        planning: True=强制长程规划，False=关闭，None=跟随全局 PLANNING_ENABLED"""
         try:
-            return asyncio.run(self._arun(user_input, user_id, history, on_event, planning, role))
+            return asyncio.run(self._arun(user_input, user_id, history, on_event, planning))
         except CostLimitExceeded as e:
             # 成本熔断：预算用尽，终止执行（on_event 已推送提示，这里返回友好文案）
             reply = "⚠️ 今日费用预算已用尽，本次执行已自动终止。"
@@ -256,9 +254,8 @@ class McpAgent:
         history: list[dict] | None,
         on_event: Callable[[dict], None] | None,
         planning: bool | None = None,
-        role: str = "user",
     ) -> str:
-        tool_names = [t.name for t in [*build_tools(user_id, role), *_get_mcp_tools()]]
+        tool_names = [t.name for t in [*build_tools(user_id), *_get_mcp_tools()]]
         logger.info("[Agent] 收到请求 user_id=%s 规划开关=%s 工具=%s", user_id, planning, tool_names)
 
         # 长程规划：跟随开关（默认全局配置），先让规划器判断任务复杂度
@@ -284,9 +281,9 @@ class McpAgent:
                         parts = [cancel_text]
                         _stream_answer(on_event, cancel_text)
                         return "".join(parts)
-                return await self._arun_planned(user_input, user_id, history, on_event, plan, role)
+                return await self._arun_planned(user_input, user_id, history, on_event, plan)
 
-        return await self._arun_single(user_input, user_id, history, on_event, emit_answer=True, role=role)
+        return await self._arun_single(user_input, user_id, history, on_event, emit_answer=True)
 
     async def _arun_planned(
         self,
@@ -295,7 +292,6 @@ class McpAgent:
         history: list[dict] | None,
         on_event: Callable[[dict], None] | None,
         plan: list[dict],
-        role: str = "user",
     ) -> str:
         """按计划逐个执行子任务（静默执行，避免半成品回答流出），最后统一汇总"""
         _emit(on_event, {
@@ -313,7 +309,7 @@ class McpAgent:
                 f"请执行以下子任务并汇报结果（不要重复整个目标）：\n{step['action']}"
             )
             try:
-                r = await self._arun_single(step_input, user_id, history, None, emit_answer=False, role=role)
+                r = await self._arun_single(step_input, user_id, history, None, emit_answer=False)
             except Exception as e:
                 r = f"子任务执行出错: {e}"
             results.append(f"【第 {i} 步：{step['name']}】\n{r}")
@@ -330,14 +326,13 @@ class McpAgent:
         history: list[dict] | None,
         on_event: Callable[[dict], None] | None,
         emit_answer: bool = True,
-        role: str = "user",
     ) -> str:
         llm = _create_llm()
 
         # 工具 = 本地注册工具（用户态/多模态）+ MCP 协议接入的外部服务工具
         agent = create_agent(
             model=llm,
-            tools=[*build_tools(user_id, role), *_get_mcp_tools()],
+            tools=[*build_tools(user_id), *_get_mcp_tools()],
             system_prompt=SYSTEM_PROMPT,
             middleware=[ToolRetryMiddleware(max_retries=1, retry_on=Exception)],
         )

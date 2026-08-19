@@ -11,5 +11,4 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)        # 主键，自增
     username = Column(String(64), unique=True, nullable=False, index=True)  # 用户名，唯一索引
     hashed_password = Column(String(256), nullable=False)             # bcrypt 加密后的密码
-    role = Column(String(16), nullable=False, default="user")         # 角色：admin / user
     created_at = Column(DateTime, default=datetime.utcnow)            # 注册时间

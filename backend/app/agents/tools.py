@@ -501,10 +501,10 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
 
 # === 工具工厂：按用户绑定，注入 user_id，统一截断 ===
 
-def build_tools(user_id: int, role: str = "user") -> list:
+def build_tools(user_id: int) -> list:
     """为指定用户构建可调用工具列表（闭包注入 user_id，天然用户隔离）。
 
-    高危工具（删除/移动文件、执行命令）仅 admin 可用，普通用户不注册这些工具。
+    高危操作（删除/移动文件、执行命令）统一人工确认后放行（Claude Code 权限模式）。
     """
     from langchain_core.tools import tool
 
@@ -636,9 +636,9 @@ def build_tools(user_id: int, role: str = "user") -> list:
     def delete_file(file_path: str) -> str:
         """删除工作区内的文件或空目录。参数 file_path（工作区内相对路径）"""
         try:
-            if role != "admin" and not _user_confirm(fs_tools._confirm_handler,
-                                                     f"Agent 请求删除文件「{file_path}」，是否允许？"):
-                return "已取消（普通用户使用删除类工具需逐次人工确认）"
+            if not _user_confirm(fs_tools._confirm_handler,
+                                 f"Agent 请求删除文件「{file_path}」，是否允许？"):
+                return "已取消（删除操作需人工确认）"
             return fs_tools._delete(file_path)
         except Exception as e:
             return f"删除失败: {e}"
@@ -648,9 +648,9 @@ def build_tools(user_id: int, role: str = "user") -> list:
     def move_file(src_path: str, dst_path: str) -> str:
         """移动或重命名工作区内文件。参数 src_path（源相对路径）、dst_path（目标相对路径）"""
         try:
-            if role != "admin" and not _user_confirm(fs_tools._confirm_handler,
-                                                     f"Agent 请求移动文件「{src_path}」→「{dst_path}」，是否允许？"):
-                return "已取消（普通用户使用移动类工具需逐次人工确认）"
+            if not _user_confirm(fs_tools._confirm_handler,
+                                 f"Agent 请求移动文件「{src_path}」→「{dst_path}」，是否允许？"):
+                return "已取消（移动操作需人工确认）"
             return fs_tools._move(src_path, dst_path)
         except Exception as e:
             return f"移动失败: {e}"
@@ -660,9 +660,9 @@ def build_tools(user_id: int, role: str = "user") -> list:
     def run_command(command: str) -> str:
         """在授权工作区目录内执行白名单命令（python/pip/git/node/npm 等，shell 命令如 ls 不可用）。参数 command（完整命令字符串，如 'python scripts/demo.py'）"""
         try:
-            if role != "admin" and not _user_confirm(fs_tools._confirm_handler,
-                                                     f"Agent 请求执行命令，是否允许？\n$ {command}"):
-                return "已取消（普通用户执行命令需逐次人工确认）"
+            if not _user_confirm(fs_tools._confirm_handler,
+                                 f"Agent 请求执行命令，是否允许？\n$ {command}"):
+                return "已取消（命令执行需人工确认）"
             return _truncate(fs_tools._run_command(command))
         except Exception as e:
             return f"命令执行失败: {e}"

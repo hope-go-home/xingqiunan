@@ -44,8 +44,8 @@ def test_audit_failure_does_not_break(audit_dir, monkeypatch):
 
 
 def test_build_tools_registration_complete():
-    """工具注册表与定义一致：21 个（Claude Code 模式：高危工具全员注册，普通用户逐次确认）"""
-    names = {t.name for t in tools.build_tools(7, role="admin")}
+    """工具注册表与定义一致：21 个，无死代码（query_weather 已移除）"""
+    names = {t.name for t in tools.build_tools(7)}
     assert len(names) == 21
     expected = {
         "parse_document", "list_directory", "list_tasks", "translate", "create_task",
@@ -54,13 +54,11 @@ def test_build_tools_registration_complete():
         "delete_file", "move_file", "run_command", "install_skill", "list_skills", "load_skill",
     }
     assert names == expected
-    user_names = {t.name for t in tools.build_tools(7, role="user")}
-    assert user_names == expected  # 普通用户同样拥有全部工具，仅高危操作需确认
 
 
 def test_build_tools_schemas_intact():
     """审计装饰器不破坏 LangChain 工具签名（schema 参数完整）"""
-    tools_map = {t.name: t for t in tools.build_tools(7, role="admin")}
+    tools_map = {t.name: t for t in tools.build_tools(7)}
     write_file = tools_map["write_file"]
     schema = write_file.args_schema
     assert "file_path" in schema.model_fields and "content" in schema.model_fields
