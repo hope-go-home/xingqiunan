@@ -458,10 +458,11 @@ async def websocket_chat(websocket: WebSocket):
             if use_agent or web_search:
                 # 成本熔断：入口检查，超预算不启动 Agent
                 from app.core.cost_guard import check_budget
-                ok, used, budget = await check_budget(user_id)
+                from app.core.config import COST_DAILY_BUDGET
+                ok, used = await check_budget(user_id)
                 if not ok:
-                    tip = (f"今日 token 预算已用尽（{used:,.0f} / {budget:,.0f}），"
-                           "请明天再试或联系管理员调高预算。")
+                    tip = (f"今日费用预算已用尽（{used:,.2f} / {COST_DAILY_BUDGET:,.2f} 元），"
+                           "请明天再试或调高预算。")
                     await manager.send_json(client_id, {"type": "answer", "content": tip})
                     await manager.send_stream(client_id, "", done=True)
                     ctx.append({"role": "assistant", "content": tip})
