@@ -28,7 +28,12 @@ def test_day_key_format():
 
 @pytest.mark.asyncio
 async def test_record_and_check_roundtrip():
-    """Redis 记账 + 入口检查闭环（真实 Redis 可用时）"""
+    """Redis 记账 + 入口检查闭环（无 Redis 环境自动跳过，如 CI）"""
+    try:
+        c = cost_guard._get_redis()
+        await c.ping()
+    except Exception:
+        pytest.skip("需要可用的 Redis 才能跑记账闭环测试")
     _, used_before = await cost_guard.check_budget(7)
     cost = await cost_guard.record_usage(7, 1_000_000, 0)
     _, used_after = await cost_guard.check_budget(7)
