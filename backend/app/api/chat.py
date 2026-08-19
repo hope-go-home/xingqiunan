@@ -455,7 +455,11 @@ async def websocket_chat(websocket: WebSocket):
                                 pass
                         else:
                             ws_task.cancel()
-                        (reply, used_web_search, in_tokens, out_tokens, tool_names) = agent_task.result()
+                        try:
+                            (reply, used_web_search, in_tokens, out_tokens, tool_names) = agent_task.result()
+                        except asyncio.CancelledError:
+                            # 用户点击"停止"取消了 Agent 任务
+                            break
                         logger.info("[WS] Agent 回复完成 user=%s 工具调用=%s 回复长度=%s",
                                     user_id, tool_names, len(reply))
                         break
@@ -463,6 +467,17 @@ async def websocket_chat(websocket: WebSocket):
                     msg2 = json.loads(ws_task.result())
                     if msg2.get("type") in ("confirm_response", "plan_confirm_response"):
                         _handle_confirm_msg(msg2, confirm_events, plan_confirm_events)
+                    elif msg2.get("type") == "stop":
+                        logger.info("[WS] 用户请求停止 Agent user=%s", user_id)
+                        agent_task.cancel()
+                        try:
+                            await agent_task
+                        except asyncio.CancelledError:
+                            pass
+                        except Exception:
+                            pass
+                        await manager.send_json(client_id, {"type": "agent_stopped"})
+                        break
                     else:
                         logger.info("[WS] Agent 执行中忽略非确认消息: %s", str(msg2)[:80])
                     ws_task = asyncio.create_task(websocket.receive_text())

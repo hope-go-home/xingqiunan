@@ -94,6 +94,15 @@ function handleChunk(chunk) {
     pendingPlan.value = { id: chunk.id, steps: chunk.steps || [] }
     return
   }
+  if (chunk.type === 'agent_stopped') {
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.streaming) {
+      last.streaming = false
+      if (!last.content) last.content = '⏹ 已停止'
+    }
+    sending.value = false
+    return
+  }
   const last = messages.value[messages.value.length - 1]
   // 流式分片：只追加到最后一条 assistant 消息
   if (chunk.content && last && last.role === 'assistant') {
@@ -179,7 +188,12 @@ function newChat() {
   loadSessions()
 }
 function stopReply() {
-  // 断开当前 WebSocket → 重建连接 → 停止流式输出
+  // Agent 模式：发 stop 消息让后端取消 Agent 任务（否则断开 WS 后后台还在跑工具）
+  if (useAgent.value && client?.ws?.readyState === WebSocket.OPEN) {
+    client.send({ type: 'stop' })
+    return
+  }
+  // 普通流式：断开当前 WebSocket → 重建连接 → 停止流式输出
   if (client) { client.disconnect(); client = null }
   const last = messages.value[messages.value.length - 1]
   if (last && last.streaming) {
