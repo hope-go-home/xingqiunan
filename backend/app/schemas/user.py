@@ -30,9 +30,10 @@ class LoginRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """用户信息响应：只暴露 id 和 username，不返回密码"""
+    """用户信息响应：暴露 id、username、role，不返回密码"""
     id: int
     username: str
+    role: str = "user"
 
     model_config = {"from_attributes": True}  # 支持从 ORM 模型转换
 

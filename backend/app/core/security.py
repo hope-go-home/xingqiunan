@@ -30,10 +30,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(user_id: int) -> str:
-    """登录成功时调用：生成 JWT，编码 user_id，过期时间由配置决定（默认 24 小时）"""
+def create_access_token(user_id: int, role: str = "user") -> str:
+    """登录成功时调用：生成 JWT，编码 user_id 与角色，过期时间由配置决定（默认 24 小时）"""
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode({"sub": str(user_id), "role": role, "exp": expire},
+                      SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> int | None:
@@ -42,6 +43,14 @@ def decode_access_token(token: str) -> int | None:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return int(payload["sub"])
     except (InvalidTokenError, ValueError, KeyError):
+        return None
+
+
+def decode_access_token_payload(token: str) -> dict | None:
+    """解析 JWT，返回完整载荷（含 role）；无效/过期返回 None"""
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except InvalidTokenError:
         return None
 
 

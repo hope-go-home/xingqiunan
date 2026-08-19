@@ -491,8 +491,11 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
 
 # === 工具工厂：按用户绑定，注入 user_id，统一截断 ===
 
-def build_tools(user_id: int) -> list:
-    """为指定用户构建可调用工具列表（闭包注入 user_id，天然用户隔离）"""
+def build_tools(user_id: int, role: str = "user") -> list:
+    """为指定用户构建可调用工具列表（闭包注入 user_id，天然用户隔离）。
+
+    高危工具（删除/移动文件、执行命令）仅 admin 可用，普通用户不注册这些工具。
+    """
     from langchain_core.tools import tool
 
     @tool
@@ -682,6 +685,6 @@ def build_tools(user_id: int) -> list:
         analyze_image, ocr_image, speech_to_text,
         web_search,
         write_file, read_file, list_workspace, create_directory,
-        delete_file, move_file, run_command,
+        *([delete_file, move_file, run_command] if role == "admin" else []),
         install_skill, list_skills, load_skill,
     ]

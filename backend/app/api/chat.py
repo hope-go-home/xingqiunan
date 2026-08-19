@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, REDIS_URL, ALLOWED_ORIGINS
 from app.core.database import get_db, async_session
-from app.core.security import decode_access_token, get_current_user_id
+from app.core.security import decode_access_token_payload, get_current_user_id
 from app.core.websocket_manager import manager
 from app.agents.mcp_agent import agent as mcp_agent
 from app.models.chat_message import ChatMessage
@@ -254,6 +254,7 @@ async def _exec_agent(
     user_id: int,
     ctx: list[dict] | None,
     use_planning: bool,
+    role: str = "user",
 ):
     """后台执行 Agent（线程池）：工具调用/token 事件经 run_coroutine_threadsafe 回推。
     返回 (reply, used_web_search, in_tokens, out_tokens, tool_names)
@@ -278,7 +279,7 @@ async def _exec_agent(
         )
 
     reply = await asyncio.to_thread(
-        mcp_agent.process, effective_input, user_id, ctx, on_event, use_planning
+        mcp_agent.process, effective_input, user_id, ctx, on_event, use_planning, role
     )
 
     used_web_search = False
@@ -297,7 +298,7 @@ async def _exec_agent(
             reply = await asyncio.to_thread(
                 mcp_agent.process,
                 effective_input + "\n\n[搜索结果参考]\n" + search_result,
-                user_id, ctx, on_event, use_planning,
+                user_id, ctx, on_event, use_planning, role,
             )
         except Exception:
             pass
@@ -325,10 +326,15 @@ async def websocket_chat(websocket: WebSocket):
         return
 
     # 2. token 认证：query 参数携带 JWT，user_id 一律从 token 解析，不信任消息体
-    user_id = decode_access_token(websocket.query_params.get("token", ""))
-    if user_id is None:
+    payload = decode_access_token_payload(websocket.query_params.get("token", ""))
+    if payload is None:
         await websocket.close(code=4401, reason="Unauthorized")
         return
+    user_id = int(payload["sub"])
+    # 3. 用户角色：优先取令牌内的角色（登录时写入），管理员拥有高危工具权限
+    role = payload.get("role", "user")
+    if role not in ("admin", "user"):
+        role = "user"
 
     client_id = uuid.uuid4().hex[:8]
     await manager.connect(client_id, websocket)
@@ -439,7 +445,7 @@ async def websocket_chat(websocket: WebSocket):
                 # 用户对高危命令/执行计划的确认响应能立即送达（此前主循环被 to_thread 阻塞，
                 # 确认响应积压导致每次都要干等 120 秒超时）
                 agent_task = asyncio.create_task(
-                    _exec_agent(client_id, user_input, web_search, user_id, effective[:-1], use_planning)
+                    _exec_agent(client_id, user_input, web_search, user_id, effective[:-1], use_planning, role)
                 )
                 ws_task = asyncio.create_task(websocket.receive_text())
                 while True:
