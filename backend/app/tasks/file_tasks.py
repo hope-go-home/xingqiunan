@@ -2,14 +2,17 @@
 异步任务定义：后台执行自动化任务，避免阻塞 API 响应。
 启动方式：celery -A app.tasks.celery_app worker --pool=solo -l info
 """
+import logging
 import time
 from app.tasks.celery_app import celery_app
 from app.core.config import DATABASE_URL
 from sqlalchemy import create_engine, text
 
+logger = logging.getLogger(__name__)
+
 
 def _update_task_status(task_id: int, status: str):
-    """通过同步引擎更新任务状态"""
+    """通过同步引擎更新任务状态（失败只记日志，不影响主流程）"""
     try:
         sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg2").replace("postgresql+psycopg2", "postgresql")
         engine = create_engine(sync_url)
@@ -20,8 +23,8 @@ def _update_task_status(task_id: int, status: str):
             )
             conn.commit()
         engine.dispose()
-    except Exception:
-        pass  # 状态更新失败不影响主任务
+    except Exception as e:
+        logger.error("任务 %s 状态更新失败: %s", task_id, e)
 
 
 @celery_app.task(bind=True)

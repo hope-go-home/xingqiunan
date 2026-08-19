@@ -8,9 +8,14 @@ import api from '../api/index'
 const userStore = useUserStore()
 
 const messages = ref([])
+const toolLog = ref([])      // Agent 工具调用日志（独立于消息流，避免挤掉流式回答）
 const input = ref('')
 const useAgent = ref(false)
+const useWebSearch = ref(false)
+const usePlanning = ref(false)
+const sidebarCollapsed = ref(false)
 const sending = ref(false)
+const webSearchUsed = ref(false)
 const chatEl = ref(null)
 const showMenu = ref(false)
 const uploading = ref('')
@@ -19,6 +24,11 @@ const loadingHistory = ref(false)
 const connStatus = ref('idle')
 const connError = ref('')
 const currentSessionId = ref('')
+const pendingConfirm = ref(null)
+const pendingPlan = ref(null)
+const showSkills = ref(false)
+const skills = ref([])
+const loadingSkills = ref(false)
 
 // 会话列表
 const sessions = ref([])
@@ -47,21 +57,59 @@ function fmtArgs(args) {
 }
 
 function handleChunk(chunk) {
-  // Agent 工具调用事件
+  // 长程规划：展示整体计划与当前步骤
+  if (chunk.type === 'plan') {
+    toolLog.value.push(`🧭 长程规划：${(chunk.steps || []).map((s, i) => `${i + 1}. ${s}`).join('  |  ')}`)
+    scrollBottom()
+    return
+  }
+  if (chunk.type === 'plan_step') {
+    toolLog.value.push(`⏳ 正在执行第 ${chunk.index}/${chunk.total} 步：${chunk.name}`)
+    scrollBottom()
+    return
+  }
+  // Agent 工具调用事件 → 独立日志区（不进 messages，否则会挤掉流式回答）
   if (chunk.type === 'tool_call') {
-    messages.value.push({ role: 'tool', content: `📡 调用 ${chunk.name}(${fmtArgs(chunk.args)})` })
+    toolLog.value.push(`📡 调用 ${chunk.name}(${fmtArgs(chunk.args)})`)
     scrollBottom()
     return
   }
   if (chunk.type === 'tool_result') {
-    messages.value.push({ role: 'tool', content: `✓ ${chunk.name} 返回：${String(chunk.result || '').slice(0, 120)}` })
+    // run_command 的执行输出完整展示（可滚动），其他工具保持简短
+    const result = String(chunk.result || '')
+    const preview = chunk.name === 'run_command' ? result : result.slice(0, 120)
+    toolLog.value.push(`✓ ${chunk.name} 返回：${preview}`)
     scrollBottom()
     return
   }
+  if (chunk.type === 'web_search_used') {
+    webSearchUsed.value = !!chunk.used
+    return
+  }
+  if (chunk.type === 'confirm_request') {
+    pendingConfirm.value = { id: chunk.id, prompt: chunk.prompt }
+    return
+  }
+  if (chunk.type === 'plan_confirm_request') {
+    pendingPlan.value = { id: chunk.id, steps: chunk.steps || [] }
+    return
+  }
   const last = messages.value[messages.value.length - 1]
-  if (!last || last.role !== 'assistant') return
-  if (chunk.content) { last.content += chunk.content; scrollBottom() }
-  if (chunk.done) { last.streaming = false; sending.value = false; loadSessions() }
+  // 流式分片：只追加到最后一条 assistant 消息
+  if (chunk.content && last && last.role === 'assistant') {
+    last.content += chunk.content
+    scrollBottom()
+  }
+  // 结束标记：无论当前最后一条消息是什么，都必须复位发送状态
+  if (chunk.done) {
+    if (last && last.role === 'assistant') {
+      last.streaming = false
+      last.webSearch = webSearchUsed.value
+    }
+    sending.value = false
+    webSearchUsed.value = false
+    loadSessions()
+  }
 }
 
 function send(text) {
@@ -71,15 +119,18 @@ function send(text) {
   if (!currentSessionId.value) currentSessionId.value = genSessionId()
   messages.value.push({ role: 'user', content: msg })
   messages.value.push({ role: 'assistant', content: '', streaming: true })
+  toolLog.value = []
+  webSearchUsed.value = false
   if (!text) input.value = ''
   sending.value = true; showMenu.value = false
 
-  getClient().send({ message: msg, use_agent: useAgent.value, session_id: currentSessionId.value, user_id: userStore.user?.id || 0 })
+  // user_id 不再传给后端：服务端从 WS 握手时的 JWT 解析
+  getClient().send({ message: msg, use_agent: useAgent.value, web_search: useWebSearch.value, use_planning: usePlanning.value, session_id: currentSessionId.value })
   scrollBottom()
 }
 
 function scrollBottom() { nextTick(() => { if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight }) }
-function onKeydown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
+function onKeydown(e) { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } }
 function reconnect() { connError.value = ''; if (client) { client.disconnect(); client = null }; getClient() }
 function genSessionId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8) }
 
@@ -110,6 +161,7 @@ async function selectSession(sid) {
   if (sending.value) return
   loadingHistory.value = true
   currentSessionId.value = sid
+  toolLog.value = []
   try {
     const { data } = await api.get('/chat/history', { params: { session_id: sid } })
     messages.value = (data || []).map(m => ({ role: m.role, content: m.content, streaming: false }))
@@ -123,7 +175,7 @@ async function deleteSession(sid) {
   loadSessions()
 }
 function newChat() {
-  messages.value = []; currentSessionId.value = ''
+  messages.value = []; toolLog.value = []; currentSessionId.value = ''; webSearchUsed.value = false
   loadSessions()
 }
 function stopReply() {
@@ -138,6 +190,39 @@ function stopReply() {
   getClient()
 }
 
+async function loadSkills() {
+  loadingSkills.value = true
+  try { skills.value = (await api.get('/chat/skills')).data || [] } catch { skills.value = [] }
+  finally { loadingSkills.value = false }
+}
+function openSkills() {
+  showSkills.value = true
+  loadSkills()
+}
+function closeSkills() {
+  showSkills.value = false
+}
+function selectSkill(s) {
+  showSkills.value = false
+  // 选择技能：直接走 Agent 单步执行（load_skill → 按 SKILL.md 操作），不走规划、不弹规划确认
+  useAgent.value = true
+  usePlanning.value = false
+  const prefix = `[技能 ${s.name}] `
+  input.value = input.value ? prefix + input.value : prefix
+  nextTick(() => { document.querySelector('.chat-input')?.focus() })
+}
+
+function respondConfirm(allow) {
+  if (!pendingConfirm.value) return
+  getClient().send({ type: 'confirm_response', id: pendingConfirm.value.id, allow })
+  pendingConfirm.value = null
+}
+function respondPlan(allow) {
+  if (!pendingPlan.value) return
+  getClient().send({ type: 'plan_confirm_response', id: pendingPlan.value.id, allow })
+  pendingPlan.value = null
+}
+
 function onClickOutside(e) { if (!e.target.closest('.plus-area')) showMenu.value = false }
 
 onMounted(() => { getClient(); loadSessions(); document.addEventListener('click', onClickOutside) })
@@ -147,7 +232,7 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 <template>
   <div class="chat-layout">
     <!-- 左侧会话列表 -->
-    <aside class="session-sidebar">
+    <aside v-show="!sidebarCollapsed" class="session-sidebar">
       <button class="new-chat-btn" @click="newChat">+ 新对话</button>
       <div class="session-list">
         <div v-if="loadingSessions" class="session-empty">加载中…</div>
@@ -164,12 +249,50 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
       </div>
     </aside>
 
+    <!-- 侧边栏折叠按钮 -->
+    <button class="sidebar-toggle" :title="sidebarCollapsed ? '展开会话列表' : '收起会话列表'" @click="sidebarCollapsed = !sidebarCollapsed">
+      <span v-if="!sidebarCollapsed">«</span><span v-else>»</span>
+    </button>
+
     <!-- 右侧聊天区 -->
     <div class="chat-panel card">
       <div class="chat-toolbar">
         <div class="mode-toggle">
           <button :class="['mode-btn', { active: !useAgent }]" @click="useAgent = false">普通</button>
           <button :class="['mode-btn', { active: useAgent }]" @click="useAgent = true">Agent</button>
+        </div>
+        <button
+          :class="['web-search-btn', { active: useWebSearch }]"
+          :title="useWebSearch ? '已开启联网搜索，回答前会先搜索最新信息' : '开启联网搜索（自动切换 Agent 模式）'"
+          @click="useWebSearch = !useWebSearch"
+        >
+          🌐 联网
+        </button>
+        <button
+          :class="['plan-btn', { active: usePlanning }]"
+          :title="usePlanning ? '已开启长程规划，复杂任务自动拆解执行' : '开启长程规划：复杂任务自动拆解成多步执行'"
+          @click="usePlanning = !usePlanning; if (usePlanning) useAgent = true"
+        >
+          🧭 规划
+        </button>
+        <button class="plan-btn skills-btn" title="查看已安装技能" @mouseenter="openSkills">
+          🧩 技能 <span class="skills-caret">▾</span>
+        </button>
+        <div v-if="showSkills" class="skills-dropdown" @mouseleave="showSkills = false">
+          <div class="skills-dd-head">
+            <span>🧩 已安装技能</span>
+            <span class="skills-dd-count">{{ skills.length }}</span>
+          </div>
+          <div v-if="loadingSkills" class="skills-empty">加载中…</div>
+          <div v-else-if="skills.length === 0" class="skills-empty">
+            尚未安装技能<br/><span class="skills-hint">对话中让 Agent 执行 install_skill 安装（如 pptx/docx/pdf/xlsx）</span>
+          </div>
+          <div v-else class="skills-dd-list">
+            <div v-for="s in skills" :key="s.name" class="skill-dd-item" @click="selectSkill(s)">
+              <div class="skill-name">{{ s.name }}</div>
+              <div class="skill-desc">{{ s.description }}</div>
+            </div>
+          </div>
         </div>
         <span v-if="useAgent" class="agent-indicator"><span class="pulse-dot"></span> Agent</span>
         <span class="conn-status" :class="'conn-' + connStatus">
@@ -181,6 +304,40 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
       <div v-if="connError" class="conn-banner">{{ connError }}</div>
       <div v-if="uploading" class="upload-banner">{{ uploading }}</div>
 
+      <!-- 长程规划确认弹窗 -->
+      <div v-if="pendingPlan" class="confirm-overlay">
+        <div class="confirm-modal plan-modal">
+          <div class="confirm-icon">🧭</div>
+          <div class="confirm-title">执行计划确认</div>
+          <div class="plan-steps">
+            <div v-for="(s, i) in pendingPlan.steps" :key="i" class="plan-step">
+              <span class="plan-step-no">{{ i + 1 }}</span>
+              <div class="plan-step-body">
+                <div class="plan-step-name">{{ s.name }}</div>
+                <div class="plan-step-action">{{ s.action }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="confirm-actions">
+            <button class="btn btn-ghost confirm-btn" @click="respondPlan(false)">取消</button>
+            <button class="btn btn-primary confirm-btn" @click="respondPlan(true)">开始执行</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 高危命令人工确认弹窗 -->
+      <div v-if="pendingConfirm" class="confirm-overlay">
+        <div class="confirm-modal">
+          <div class="confirm-icon">⚠️</div>
+          <div class="confirm-title">需要人工确认</div>
+          <div class="confirm-prompt">{{ pendingConfirm.prompt }}</div>
+          <div class="confirm-actions">
+            <button class="btn btn-ghost confirm-btn" @click="respondConfirm(false)">拒绝</button>
+            <button class="btn btn-danger confirm-btn" @click="respondConfirm(true)">允许执行</button>
+          </div>
+        </div>
+      </div>
+
       <div ref="chatEl" class="chat-messages">
         <div v-if="messages.length === 0" class="chat-empty">
           <div class="empty-title">TaskBench AI</div>
@@ -188,6 +345,7 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
         </div>
         <div v-for="(msg, i) in messages" :key="i" :class="['msg-row', 'msg-' + msg.role]">
           <div class="msg-bubble">
+            <span v-if="msg.webSearch" class="search-badge">🌐 已联网搜索</span>
             <span class="msg-text">{{ msg.content }}</span>
             <span v-if="msg.streaming" class="typing-cursor">▌</span>
           </div>
@@ -195,6 +353,10 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
         <div v-if="sending && messages.length > 0 && messages[messages.length - 1].content === ''" class="msg-row msg-assistant">
           <div class="msg-bubble loading-bubble"><span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></div>
         </div>
+      </div>
+      <div v-if="toolLog.length > 0" class="tool-log">
+        <div class="tool-log-head">🛠 Agent 工具调用 <span class="tool-log-count">{{ toolLog.length }}</span></div>
+        <div v-for="(line, i) in toolLog" :key="i" class="tool-log-line">{{ line }}</div>
       </div>
 
       <div class="chat-input-area">
@@ -242,13 +404,35 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .session-item:hover .session-del { opacity: 1; }
 .session-del:hover { color: var(--crimson); }
 
+/* ===== 侧边栏折叠按钮 ===== */
+.sidebar-toggle {
+  width: 18px; min-width: 18px; align-self: center; padding: 10px 0;
+  background: var(--steel); color: var(--slate); border-radius: 0 4px 4px 0;
+  font-size: 12px; font-weight: 700; transition: all 0.15s; cursor: pointer;
+}
+.sidebar-toggle:hover { background: var(--border); color: var(--ink); }
+
 /* ===== 聊天区 ===== */
-.chat-panel { display: flex; flex-direction: column; flex: 1; min-height: 400px; overflow: hidden; border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.chat-panel { display: flex; flex-direction: column; flex: 1; min-height: 400px; overflow: hidden; border-radius: 0 var(--radius-md) var(--radius-md) 0; position: relative; }
 .btn-xs { padding: 3px 10px; font-size: 11px; }
 .chat-toolbar { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 4px; flex-shrink: 0; flex-wrap: wrap; }
 .mode-toggle { display: flex; background: var(--steel); border-radius: var(--radius-sm); overflow: hidden; }
 .mode-btn { padding: 5px 12px; font-size: 11px; font-weight: 600; background: transparent; color: var(--slate); transition: all 0.15s; }
 .mode-btn.active { background: var(--cobalt); color: #fff; }
+.web-search-btn {
+  padding: 5px 12px; font-size: 11px; font-weight: 600; border-radius: var(--radius-sm);
+  background: var(--steel); color: var(--slate); border: 1px solid var(--border);
+  transition: all 0.15s; cursor: pointer;
+}
+.web-search-btn:hover { background: var(--border); color: var(--ink); }
+.web-search-btn.active { background: var(--verdant); border-color: var(--verdant); color: #fff; }
+.plan-btn {
+  padding: 5px 12px; font-size: 11px; font-weight: 600; border-radius: var(--radius-sm);
+  background: var(--steel); color: var(--slate); border: 1px solid var(--border);
+  transition: all 0.15s; cursor: pointer;
+}
+.plan-btn:hover { background: var(--border); color: var(--ink); }
+.plan-btn.active { background: var(--amber); border-color: var(--amber); color: #fff; }
 .agent-indicator { font-size: 11px; color: var(--amber); display: flex; align-items: center; gap: 5px; }
 .conn-status { font-size: 11px; display: flex; align-items: center; gap: 5px; margin-left: auto; }
 .conn-dot { width: 6px; height: 6px; border-radius: 50%; }
@@ -260,6 +444,44 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .conn-banner { background: var(--crimson-bg); color: var(--crimson); }
 .upload-banner { background: var(--cobalt-bg); color: var(--cobalt); }
 
+/* ===== 高危命令确认弹窗 ===== */
+.confirm-overlay {
+  position: absolute; inset: 0; z-index: 50;
+  background: rgba(15, 23, 42, 0.45); display: flex;
+  align-items: center; justify-content: center;
+}
+.confirm-modal {
+  width: 420px; max-width: 90%; background: var(--white);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+.confirm-icon { font-size: 28px; margin-bottom: 8px; }
+.confirm-title { font-size: 15px; font-weight: 700; color: var(--crimson); margin-bottom: 8px; }
+.confirm-prompt {
+  font-size: 13px; color: var(--ink); line-height: 1.6;
+  background: var(--steel); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 16px; white-space: pre-wrap;
+  word-break: break-all; font-family: ui-monospace, Consolas, monospace;
+}
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirm-btn { padding: 8px 18px; }
+
+/* 规划确认弹窗：步骤列表 */
+.plan-modal { width: 520px; }
+.plan-steps { max-height: 280px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+.plan-step {
+  display: flex; gap: 10px; padding: 10px 12px; background: var(--steel);
+  border-radius: var(--radius-sm); border-left: 3px solid var(--amber);
+}
+.plan-step-no {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--cobalt); color: #fff; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.plan-step-body { flex: 1; min-width: 0; }
+.plan-step-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.plan-step-action { font-size: 12px; color: var(--slate); margin-top: 2px; line-height: 1.5; word-break: break-all; }
+
 .chat-messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .chat-empty { text-align: center; padding: 64px 16px; color: var(--slate); }
 .empty-title { font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
@@ -269,6 +491,11 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .msg-bubble { max-width: 78%; padding: 10px 16px; border-radius: var(--radius-md); font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 .msg-user .msg-bubble { background: var(--cobalt); color: #fff; border-bottom-right-radius: 4px; }
 .msg-assistant .msg-bubble { background: var(--steel); color: var(--ink); border-bottom-left-radius: 4px; }
+.search-badge {
+  display: inline-block; margin-bottom: 6px; padding: 2px 8px;
+  background: var(--verdant-bg, #e3f4ec); color: var(--verdant);
+  border-radius: 999px; font-size: 10px; font-weight: 600;
+}
 .msg-tool { justify-content: flex-start; }
 .msg-tool .msg-bubble {
   background: var(--cobalt-bg); color: var(--cobalt);
@@ -283,6 +510,43 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 @keyframes dot-bounce { 0%, 100% { transform: translateY(0); opacity: 0.3; } 50% { transform: translateY(-6px); opacity: 1; } }
 .typing-cursor { animation: blink 0.8s step-end infinite; color: var(--cobalt); }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ===== 技能下拉菜单 ===== */
+.skills-btn { position: relative; }
+.skills-caret { font-size: 9px; margin-left: 3px; }
+.skills-dropdown {
+  position: absolute; top: 38px; left: 0; z-index: 60;
+  width: 320px; background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.skills-dd-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; font-size: 12px; font-weight: 700; color: var(--ink);
+  border-bottom: 1px solid var(--border); background: var(--steel);
+}
+.skills-dd-count { font-size: 11px; color: var(--muted); font-weight: 400; }
+.skills-empty { padding: 16px; text-align: center; font-size: 12px; color: var(--slate); line-height: 1.8; }
+.skills-hint { font-size: 11px; color: var(--muted); }
+.skills-dd-list { max-height: 260px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.skill-dd-item {
+  padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  background: var(--steel); border-left: 3px solid var(--amber);
+  transition: background 0.1s;
+}
+.skill-dd-item:hover { background: var(--cobalt-bg); border-left-color: var(--cobalt); }
+.skill-name { font-size: 12px; font-weight: 700; color: var(--ink); font-family: ui-monospace, Consolas, monospace; }
+.skill-desc { font-size: 11px; color: var(--slate); margin-top: 2px; line-height: 1.5; }
+
+/* Agent 工具调用日志 */
+.tool-log {
+  max-height: 140px; overflow-y: auto; margin-top: 10px; padding: 10px 12px;
+  background: var(--cobalt-bg); border: 1px dashed var(--cobalt); border-radius: var(--radius-sm);
+  font-size: 12px; font-family: ui-monospace, Consolas, monospace; flex-shrink: 0;
+}
+.tool-log-head { font-weight: 700; color: var(--cobalt); margin-bottom: 6px; }
+.tool-log-count { font-weight: 400; color: var(--slate); margin-left: 4px; }
+.tool-log-line { color: var(--ink); line-height: 1.7; word-break: break-all; }
 
 .chat-input-area { display: flex; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); flex-shrink: 0; align-items: flex-end; }
 .plus-area { position: relative; flex-shrink: 0; }

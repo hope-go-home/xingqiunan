@@ -36,6 +36,9 @@ async function handleSearch() {
   } finally { searching.value = false }
 }
 
+// 中文输入法组合状态下的回车不触发搜索
+function onSearchEnter(e) { if (e.isComposing) return; handleSearch() }
+
 // 文档列表
 const documents = ref([])
 const listLoading = ref(false)
@@ -83,7 +86,7 @@ onMounted(fetchList)
         <div class="card">
           <h2 class="section-title">语义搜索</h2>
           <div class="form-group">
-            <input v-model="query" class="form-input" placeholder="输入搜索关键词…" @keyup.enter="handleSearch" />
+            <input v-model="query" class="form-input" placeholder="输入搜索关键词…" @keyup.enter="onSearchEnter" />
           </div>
           <div class="form-group">
             <label class="form-label">返回数量</label>

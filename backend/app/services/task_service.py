@@ -2,10 +2,14 @@
 任务业务逻辑：创建、查询任务列表、获取单个任务。
 创建任务时自动提交到 Celery 异步队列执行。
 """
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.task import Task
 from app.schemas.task import TaskCreateRequest, TaskResponse
+
+logger = logging.getLogger(__name__)
 
 
 class TaskService:
@@ -25,7 +29,7 @@ class TaskService:
         await self.db.commit()
         await self.db.refresh(task)
 
-        # 提交到 Celery 异步队列执行（失败不影响创建结果）
+        # 提交到 Celery 异步队列执行（失败不影响创建结果，记日志便于排查）
         try:
             from app.tasks.file_tasks import execute_task
             execute_task.delay(
@@ -34,8 +38,8 @@ class TaskService:
                 task_type=task.task_type,
                 description=task.description or "",
             )
-        except Exception:
-            pass  # Redis 没启动时静默跳过，任务保持 pending
+        except Exception as e:
+            logger.warning("任务 %s 提交 Celery 队列失败（保持 pending）: %s", task.id, e)
 
         return TaskResponse.model_validate(task)
 

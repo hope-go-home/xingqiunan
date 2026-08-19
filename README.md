@@ -1,240 +1,123 @@
 # TaskBench — 智能任务自动化工作台
 
-基于 **LangChain Agent + RAG** 的企业级智能工作平台。LLM 自主编排工具链完成任务，WebSocket 流式实时输出，Chroma 向量库驱动知识库语义检索。
+基于 **LangChain Agent + MCP 协议 + RAG** 的智能工作平台。LLM 自主编排工具链完成任务，
+WebSocket 流式实时输出，Chroma 向量库驱动知识库语义检索。
 
----
+## 核心亮点
 
-## 架构总览
+### 1. Agent 工具编排引擎
+LLM 原生 function calling 驱动：分析需求 → 选择工具 → 执行 → 汇总。工具分两层接入：
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    浏览器 (localhost:5173)                    │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │ 总览面板  │ │ 任务管理  │ │ AI 对话   │ │   知识库      │   │
-│  │ 统计卡片  │ │ 创建+列表 │ │ WS 流式   │ │ 搜索+CRUD     │   │
-│  └──────────┘ └──────────┘ └─────┬─────┘ └──────────────┘   │
-└──────────────────────────────────┼──────────────────────────┘
-                                   │ WebSocket + HTTP REST
-                              ┌────┴────┐
-                              │  Vite   │ 代理 /api → :8000
-                              └────┬────┘
-                                   │
-┌──────────────────────────────────┼──────────────────────────┐
-│                    FastAPI (:8000)                           │
-│  ┌──────────┐ ┌──────────┐ ┌────┴─────┐ ┌──────────────┐   │
-│  │ 认证模块  │ │ 文件模块  │ │ 聊天模块  │ │  知识库模块   │   │
-│  │ JWT+bcrypt│ │ 上传+存储 │ │ LLM+Agent│ │ Chroma 向量  │   │
-│  └──────────┘ └──────────┘ └────┬─────┘ └──────────────┘   │
-│                                 │                            │
-│               ┌─────────────────┴──────────┐                │
-│               │       MCP Agent 引擎        │                │
-│               │  LLM 自主分析 → 选择工具 → 执行 → 汇总  │   │
-│               └────┬─────┬──────┬──────┬───┘                │
-│                    │     │      │      │                     │
-│               ┌────┴┐ ┌──┴──┐ ┌─┴──┐ ┌─┴──────┐            │
-│               │解析 │ │计算 │ │天气 │ │知识库搜│  …6个工具  │
-│               │文档 │ │引擎 │ │查询 │ │索/添加 │            │
-│               └────┘ └────┘ └────┘ └────────┘            │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────┐           │
-│  │PostgreSQL│  │  Redis   │  │    Celery      │           │
-│  │ 任务/用户 │  │ 缓存/队列 │  │  异步任务执行   │           │
-│  └──────────┘  └──────────┘  └────────────────┘           │
-└─────────────────────────────────────────────────────────────┘
-```
+| 层 | 方式 | 工具 |
+|----|------|------|
+| **MCP 协议层**（外部服务） | 本地 MCP Server（`app/agents/mcp_server.py`），Agent 经 `langchain-mcp-adapters` 连接 | `get_current_time`、`query_weather` |
+| **本地注册层**（用户态） | 闭包注入 `user_id`，天然多租户隔离 | `parse_document`、`list_directory`、`list_tasks`、`translate`、`create_task`、`search_knowledge`、`add_knowledge`、`analyze_image`、`ocr_image`、`speech_to_text` |
 
----
+- 最多 5 轮工具调用，60s 总超时，工具失败自动重试（ToolRetryMiddleware）
+- 工具结果统一截断（2000 字符），防止撑爆 LLM 上下文
+- 事件驱动回传：`tool_call` / `tool_result` / `answer` / `usage` 四种事件实时推送前端
 
-## 核心功能
+### 2. WebSocket 流式对话 + 过程可视化
+- 握手时校验 JWT（`?token=`），user_id 一律从 token 解析，不信任客户端上报
+- Origin 白名单校验（防 CSWSH）
+- 普通模式逐字流式；Agent 模式工具调用过程实时展示，回答分片推送
+- 会话级上下文隔离（Redis key 含 session_id）+ 超长自动 LLM 摘要压缩
 
-### 1. AI Agent 多工具协作
+### 3. 安全与成本
+- **Prompt 注入防御**：文件内容以数据标记包裹并声明"指令无效"，Agent 系统提示词含安全边界规则
+- **多租户文件沙箱**：`uploads/user_{id}/` 隔离，工具路径校验防穿越
+- **上传限制**：类型白名单 + 20MB 上限 + 分块流式写入
+- **成本核算**：每次调用 token 用量落库 `token_usage` 表，支撑成本统计
 
-Agent 模式下，LLM 不直接回答，而是**自主分析需求 → 选择工具 → 执行 → 汇总结果**。
+### 4. RAG 知识库
+Chroma 向量检索，按用户 Collection 隔离，支持语义搜索。文档管理见另一个 RAG 专项项目。
 
-| 工具名 | 功能 | 示例 |
-|--------|------|------|
-| `parse_document` | 解析 TXT/MD/JSON 文件 | "帮我读一下这个文件内容" |
-| `list_directory` | 浏览目录结构 | "upload 目录下有什么文件" |
-| `calculate` | 数学四则运算 | "总价 (100+200)*3 是多少" |
-| `query_weather` | 高德实时天气 | "查一下杭州明天下不下雨" |
-| `search_knowledge` | 知识库语义搜索 | "知识库里有没有关于报销的文档" |
-| `add_knowledge` | 添加文档到知识库 | "把这段文字存到知识库" |
+### 5. 异步任务
+创建任务后提交 Celery 队列异步执行，状态实时流转（pending → running → completed/failed）。
 
-Agent 最多迭代 5 轮，可组合多个工具完成复杂任务。
+## 技术栈
 
-### 2. WebSocket 流式对话
-
-普通模式下 LLM 逐字流式输出，首字延迟 <200ms，体验类似 ChatGPT 打字效果。
-
-### 3. RAG 知识库
-
-- 基于 Chroma 向量数据库，本地持久化
-- 用户间数据隔离（每人独立 Collection）
-- 支持语义搜索（不依赖关键词匹配）
-
-### 4. 异步任务执行
-
-创建任务后自动提交 Celery 队列异步执行，任务状态实时更新（pending → running → completed/failed）。
-
----
+| 层 | 技术 |
+|----|------|
+| 后端 | FastAPI + SQLAlchemy(async) + PostgreSQL |
+| AI | LangChain + ChatOpenAI（通义千问） |
+| 工具接入 | MCP 协议（`mcp` SDK + `langchain-mcp-adapters`） |
+| 队列/缓存 | Celery + Redis |
+| 向量库 | Chroma（本地持久化） |
+| 前端 | Vue 3 + Pinia + Vite + WebSocket |
 
 ## 快速启动
 
-### 前置条件
-
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL + Redis（推荐 Docker）
-
-### 1. 启动基础设施
+前置条件：Python 3.10+、Node.js 18+、PostgreSQL + Redis（推荐 Docker）。
 
 ```bash
-cd deploy
-docker compose -f docker-compose.yml up -d
-```
+# 1. 基础设施
+cd deploy && docker compose up -d
 
-### 2. 安装依赖
-
-```bash
-# 后端
+# 2. 后端
 cd backend
 pip install -r requirements.txt
+cp ../.env.example .env        # 填入 DASHSCOPE_API_KEY / AMAP_API_KEY / SECRET_KEY
+python -m uvicorn app.main:app --port 8000
 
-# 前端
-cd frontend
-npm install
-```
-
-### 3. 配置环境变量
-
-```bash
-cp .env.example backend/.env
-# 编辑 backend/.env，填入 API Key：
-#   DASHSCOPE_API_KEY=sk-xxx    # 通义千问
-#   AMAP_API_KEY=xxx            # 高德地图（天气查询）
-```
-
-### 4. 启动服务
-
-```bash
-# 终端 1：后端
-cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# 终端 2：Celery Worker（异步任务）
-cd backend
+# 3. Celery Worker（异步任务）
 celery -A app.tasks.celery_app worker --pool=solo -l info
 
-# 终端 3：前端
-cd frontend
-npm run dev
+# 4. 前端
+cd frontend && npm install && npm run dev
 ```
 
 打开 http://localhost:5173
 
----
+## 测试
+
+```bash
+cd backend && python -m pytest
+```
+
+23 个用例覆盖：Agent 引擎（FakeLLM 模拟多轮工具调用、超时、轮数上限、异常工具）、
+JWT 安全、文件沙箱防穿越、Schema 校验。`tests/test_agent.py` 中的 FakeLLM
+不依赖真实模型，可在无 API Key 环境运行。
 
 ## 项目结构
 
 ```
-TaskBench/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                    # FastAPI 入口
-│   │   ├── core/
-│   │   │   ├── config.py              # 配置（load_dotenv + os.getenv）
-│   │   │   ├── database.py            # 异步 SQLAlchemy 引擎
-│   │   │   ├── security.py            # JWT + bcrypt
-│   │   │   └── websocket_manager.py   # WebSocket 连接池
-│   │   ├── models/                    # ORM 模型（User/FileRecord/Task）
-│   │   ├── schemas/                   # Pydantic 请求/响应体
-│   │   ├── api/                       # 路由（auth/files/tasks/chat/knowledge）
-│   │   ├── services/                  # 业务逻辑层
-│   │   ├── agents/
-│   │   │   ├── tools.py               # 6 个工具函数 + 注册表
-│   │   │   └── mcp_agent.py           # Agent 引擎（LLM 决策 + 工具执行）
-│   │   └── tasks/
-│   │       ├── celery_app.py          # Celery 配置
-│   │       └── file_tasks.py          # 异步任务定义
-│   ├── .env
-│   └── requirements.txt
-│
-├── frontend/
-│   ├── src/
-│   │   ├── main.js                    # Vue 入口
-│   │   ├── App.vue                    # 全局壳（侧边栏 + KeepAlive）
-│   │   ├── router/index.js            # 路由 + 登录守卫
-│   │   ├── stores/                    # Pinia 状态管理
-│   │   ├── api/                       # Axios + WebSocket 客户端
-│   │   ├── views/                     # 5 个页面
-│   │   └── components/                # 3 个可复用组件
-│   └── vite.config.js
-│
-├── deploy/
-│   └── docker-compose.yml             # PostgreSQL + Redis 部署
-└── README.md
+backend/
+├── app/
+│   ├── main.py                # FastAPI 入口（CORS 白名单、日志、建表）
+│   ├── core/                  # 配置 / 数据库 / JWT / WS 连接管理
+│   ├── api/                   # auth / files / tasks / chat / knowledge
+│   ├── agents/
+│   │   ├── tools.py           # 本地工具注册表（闭包注入 user_id）
+│   │   ├── mcp_server.py      # MCP Server：外部服务工具（天气/时间）
+│   │   └── mcp_agent.py       # Agent 引擎（LLM 决策 + 工具执行 + 事件回传）
+│   ├── services/              # 业务逻辑层
+│   ├── models/                # ORM（含 token_usage 成本统计表）
+│   ├── tasks/                 # Celery 配置与异步任务
+│   └── tests/                 # pytest 测试套件
+├── mcp_servers.json           # MCP 客户端连接配置
+└── requirements.txt
+
+frontend/
+└── src/
+    ├── api/chat.js            # WebSocket 客户端（token 认证 + 断线重连）
+    ├── components/ChatPanel.vue  # 聊天面板（Agent 工具日志独立展示）
+    ├── views/                 # 总览 / 对话 / 知识库 / 登录
+    └── stores/                # Pinia（user / task）
 ```
 
----
+## 技术选型与取舍（面试向）
 
-## API 速查
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/auth/register` | 注册 | — |
-| POST | `/auth/login` | 登录 → JWT | — |
-| POST | `/files/upload` | 上传文件 | Bearer |
-| POST | `/tasks/` | 创建任务 → 触发 Celery | Bearer |
-| GET | `/tasks/` | 任务列表 | Bearer |
-| GET | `/tasks/{id}` | 任务详情 | Bearer |
-| WS | `/chat/ws` | 流式对话 / Agent | — |
-| POST | `/knowledge/add` | 添加文档 | Bearer |
-| GET | `/knowledge/search` | 语义搜索 | Bearer |
-| GET | `/knowledge/list` | 文档列表 | Bearer |
-| DELETE | `/knowledge/{id}` | 删除文档 | Bearer |
-
----
-
-## 技术栈
-
-| 层次 | 技术 |
-|------|------|
-| 后端框架 | FastAPI + Uvicorn |
-| AI 引擎 | LangChain + ChatOpenAI (qwen3.7-plus) |
-| Agent | 自研工具注册 + LLM 决策循环 |
-| 向量库 | Chroma（本地持久化） |
-| 数据库 | PostgreSQL（async SQLAlchemy） |
-| 缓存/队列 | Redis |
-| 异步任务 | Celery |
-| 前端框架 | Vue 3 (Composition API) |
-| 状态管理 | Pinia |
-| 实时通信 | WebSocket (流式输出) |
-| 构建 | Vite |
-| 部署 | Docker Compose |
-
----
-
-## Agent 工作流程
-
-```
-用户: "帮我查一下杭州的天气，然后看看知识库里有没有关于杭州的旅游攻略"
-
-    ┌───────▼────────┐
-    │  LLM 分析需求   │ → "需要两个工具: query_weather + search_knowledge"
-    └───────┬────────┘
-            │
-   ┌────────▼─────────┐
-   │ 第1轮: query_weather("杭州")
-   │ → 返回: 📍 杭州 晴 25°C~34°C
-   └────────┬─────────┘
-            │
-   ┌────────▼─────────┐
-   │ 第2轮: search_knowledge("杭州旅游攻略")
-   │ → 返回: 找到2条相关内容…
-   └────────┬─────────┘
-            │
-   ┌────────▼─────────┐
-   │ LLM 汇总结果      │ → "杭州今天晴天 25~34°C，适合出行。
-   │ 返回最终回答      │    知识库中有2条杭州旅游相关文档…"
-   └──────────────────┘
-```
+- **为什么工具分两层？** 外部服务（天气/时间）与用户态工具（文件/知识库）职责不同：
+  前者无状态、与用户无关，适合走 MCP 协议标准化接入；后者必须绑定 `user_id`
+  做数据隔离，闭包注入比参数传递更不易被 LLM 篡改。
+- **为什么 MCP 用 stdio 而不是 HTTP？** 单机演示场景 stdio 零配置、免端口；
+  多机部署可平滑替换为 streamable HTTP 传输，连接配置在 `mcp_servers.json` 一处维护。
+- **为什么 WebSocket 而不是 SSE？** 需要承载双向事件（工具调用过程推送 + 停止指令），
+  SSE 只能单向。
+- **JWT 放哪里？** 当前放 localStorage（开发便捷）。已知风险：XSS 可窃取 token；
+  生产化应换 httpOnly cookie + CSRF 防护，或短效 access + refresh token。
+- **上下文压缩策略**：超过 30 条消息对早期内容做 LLM 摘要（结果缓存 6 小时），
+  保留最近 10 条原文，控制 token 成本同时不丢失关键事实。
+- **已知局限**：WS 连接池为单进程内存实现，多实例部署需 Redis pub/sub 或粘性会话；
+  Chroma 为嵌入式模式，多进程下需换 server 模式或 pgvector。

@@ -6,8 +6,7 @@
 
 export class ChatClient {
   constructor() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    this.url = `${protocol}//${window.location.host}/api/chat/ws`
+    this.url = ''                // 在 connect() 时按当前 token 生成
     this.ws = null
     this._onChunk = null       // 收到流式分片回调
     this._onStatus = null      // 连接状态变更回调
@@ -19,7 +18,7 @@ export class ChatClient {
     this._intentionalClose = false
   }
 
-  /** 建立 WebSocket 连接 */
+  /** 建立 WebSocket 连接（带 JWT token 认证，user_id 由服务端从 token 解析） */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this._notifyStatus('connected')
@@ -34,6 +33,9 @@ export class ChatClient {
     this._notifyStatus('connecting')
 
     try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const token = localStorage.getItem('token') || ''
+      this.url = `${protocol}//${window.location.host}/api/chat/ws?token=${encodeURIComponent(token)}`
       this.ws = new WebSocket(this.url)
     } catch (e) {
       this._notifyStatus('error')
@@ -65,9 +67,17 @@ export class ChatClient {
       this._onError?.('WebSocket 连接出错，请检查后端是否运行')
     }
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       if (this._intentionalClose) return
       this._notifyStatus('disconnected')
+      // 401：token 失效，停止重连并回登录页
+      if (event.code === 4401) {
+        this._onError?.('登录已过期，请重新登录')
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        if (window.location.pathname !== '/login') window.location.href = '/login'
+        return
+      }
       // 自动重连
       if (this._reconnectCount < this._maxReconnect) {
         this._reconnectCount++

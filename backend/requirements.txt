@@ -1,19 +1,37 @@
+# 运行环境基础
 fastapi>=0.110
 uvicorn[standard]
-sqlalchemy[asyncio]
-asyncpg
-aiofiles
+python-multipart
 python-dotenv
 pydantic-settings
+
+# 数据库
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+
+# 认证
 pyjwt
 passlib[bcrypt]
+bcrypt<4.1          # passlib 1.7.4 与 bcrypt>=4.1 不兼容，锁版本
+
+# AI / Agent
 langchain-openai
 langchain-core
-psycopg2-binary
+langchain-mcp-adapters   # MCP 客户端：通过 MCP 协议接入外部工具
+mcp                      # MCP SDK：本地 MCP Server（app/agents/mcp_server.py）
+requests
+
+# 向量库 / 队列 / 文件
 chromadb
 celery[redis]
 redis
-python-multipart
-# 可选：文档解析增强
-# PyMuPDF          # PDF 解析 (pip install PyMuPDF)
-# python-docx      # Word 解析 (pip install python-docx)
+aiofiles
+
+# 可选：文档解析增强（PDF/Word）
+# PyMuPDF
+# python-docx
+
+# ===== 开发/测试 =====
+pytest
+pytest-asyncio

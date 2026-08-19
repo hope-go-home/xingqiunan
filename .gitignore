@@ -7,3 +7,8 @@ uploads/*
 chroma_data/
 *.db
 logs/
+
+# Agent 运行时产物（技能下载/生成文件/上传）
+backend/workspace/
+backend/uploads/
+backend/mcp_servers.json
