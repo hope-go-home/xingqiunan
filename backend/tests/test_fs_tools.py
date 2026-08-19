@@ -1,7 +1,12 @@
 """工作区文件工具测试：命令权限矩阵(deny/ask/allow)、敏感文件黑名单、确认机制、沙箱"""
+import shutil
+
 import pytest
 
 from app.agents import fs_tools
+
+# Windows 用 python，Ubuntu (GitHub runner) 用 python3
+PY_CMD = "python3" if shutil.which("python3") else "python"
 
 
 @pytest.fixture()
@@ -45,7 +50,7 @@ def test_deny_system_commands(ws, cmd):
 def test_allow_python_script(ws):
     """S6: 白名单内安全用法（python 脚本）正常放行"""
     fs_tools._write_file("ok.py", "print('hi')")
-    out = fs_tools._run_command("python ok.py")
+    out = fs_tools._run_command(f"{PY_CMD} ok.py")
     assert "hi" in out
 
 
@@ -122,7 +127,7 @@ def test_confirm_handler_approve(ws, monkeypatch):
     """确认回调返回 True → 命令执行"""
     fs_tools._write_file("p.py", "print('approved')")
     monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: True)
-    out = fs_tools._run_command("python p.py")
+    out = fs_tools._run_command(f"{PY_CMD} p.py")
     assert "approved" in out
 
 
@@ -142,5 +147,5 @@ def test_confirm_handler_clear_after_use(ws, monkeypatch):
 
 def test_needs_confirmation_detects_dangerous():
     assert fs_tools._needs_confirmation("git push --force origin main")
-    assert not fs_tools._needs_confirmation("python ok.py")
+    assert not fs_tools._needs_confirmation(f"{PY_CMD} ok.py")
     assert not fs_tools._needs_confirmation("echo hi")

@@ -34,6 +34,7 @@ jobs:
       - name: 语法检查
         run: |
           python -m py_compile app/main.py app/api/chat.py app/agents/*.py
+          python -m pytest tests --co -q 2>/dev/null | tail -1 || true
 
   frontend-build:
     name: 前端构建
