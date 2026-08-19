@@ -16,6 +16,7 @@ passlib[bcrypt]
 bcrypt<4.1          # passlib 1.7.4 与 bcrypt>=4.1 不兼容，锁版本
 
 # AI / Agent
+langchain
 langchain-openai
 langchain-core
 langchain-mcp-adapters   # MCP 客户端：通过 MCP 协议接入外部工具
