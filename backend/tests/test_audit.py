@@ -44,7 +44,7 @@ def test_audit_failure_does_not_break(audit_dir, monkeypatch):
 
 
 def test_build_tools_registration_complete():
-    """工具注册表与定义一致：admin 21 个，普通用户 18 个（高危工具仅 admin 可见）"""
+    """工具注册表与定义一致：21 个（Claude Code 模式：高危工具全员注册，普通用户逐次确认）"""
     names = {t.name for t in tools.build_tools(7, role="admin")}
     assert len(names) == 21
     expected = {
@@ -55,8 +55,7 @@ def test_build_tools_registration_complete():
     }
     assert names == expected
     user_names = {t.name for t in tools.build_tools(7, role="user")}
-    assert len(user_names) == 18
-    assert not {"delete_file", "move_file", "run_command"} & user_names
+    assert user_names == expected  # 普通用户同样拥有全部工具，仅高危操作需确认
 
 
 def test_build_tools_schemas_intact():

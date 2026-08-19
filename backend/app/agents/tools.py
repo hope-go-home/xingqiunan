@@ -97,6 +97,16 @@ def _audited(user_id: int):
     return deco
 
 
+def _user_confirm(confirm_handler, prompt: str) -> bool:
+    """普通用户高危操作逐次人工确认；无确认通道时拒绝（Claude Code 权限模式）"""
+    if confirm_handler is None:
+        return False
+    try:
+        return bool(confirm_handler(prompt))
+    except Exception:
+        return False
+
+
 def _truncate(text: Any, limit: int = MAX_TOOL_OUTPUT) -> str:
     """截断工具输出到 limit 字符"""
     s = str(text)
@@ -626,6 +636,9 @@ def build_tools(user_id: int, role: str = "user") -> list:
     def delete_file(file_path: str) -> str:
         """删除工作区内的文件或空目录。参数 file_path（工作区内相对路径）"""
         try:
+            if role != "admin" and not _user_confirm(fs_tools._confirm_handler,
+                                                     f"Agent 请求删除文件「{file_path}」，是否允许？"):
+                return "已取消（普通用户使用删除类工具需逐次人工确认）"
             return fs_tools._delete(file_path)
         except Exception as e:
             return f"删除失败: {e}"
@@ -635,6 +648,9 @@ def build_tools(user_id: int, role: str = "user") -> list:
     def move_file(src_path: str, dst_path: str) -> str:
         """移动或重命名工作区内文件。参数 src_path（源相对路径）、dst_path（目标相对路径）"""
         try:
+            if role != "admin" and not _user_confirm(fs_tools._confirm_handler,
+                                                     f"Agent 请求移动文件「{src_path}」→「{dst_path}」，是否允许？"):
+                return "已取消（普通用户使用移动类工具需逐次人工确认）"
             return fs_tools._move(src_path, dst_path)
         except Exception as e:
             return f"移动失败: {e}"
@@ -644,6 +660,9 @@ def build_tools(user_id: int, role: str = "user") -> list:
     def run_command(command: str) -> str:
         """在授权工作区目录内执行白名单命令（python/pip/git/node/npm 等，shell 命令如 ls 不可用）。参数 command（完整命令字符串，如 'python scripts/demo.py'）"""
         try:
+            if role != "admin" and not _user_confirm(fs_tools._confirm_handler,
+                                                     f"Agent 请求执行命令，是否允许？\n$ {command}"):
+                return "已取消（普通用户执行命令需逐次人工确认）"
             return _truncate(fs_tools._run_command(command))
         except Exception as e:
             return f"命令执行失败: {e}"
@@ -685,6 +704,6 @@ def build_tools(user_id: int, role: str = "user") -> list:
         analyze_image, ocr_image, speech_to_text,
         web_search,
         write_file, read_file, list_workspace, create_directory,
-        *([delete_file, move_file, run_command] if role == "admin" else []),
+        delete_file, move_file, run_command,
         install_skill, list_skills, load_skill,
     ]
