@@ -34,6 +34,9 @@ LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.7-plus")
 # === 高德地图 ===
 AMAP_API_KEY = os.getenv("AMAP_API_KEY", "")
 
+# === 成本熔断：每日费用预算（元，按用户，超限拒绝新的 Agent 请求）===
+COST_DAILY_BUDGET = float(os.getenv("COST_DAILY_BUDGET", "10"))
+
 # === 博查（联网搜索）===
 BOCHA_API_KEY = os.getenv("BOCHA_API_KEY", "")
 

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, REDIS_URL, ALLOWED_ORIGINS
 from app.core.database import get_db, async_session
 from app.core.security import decode_access_token_payload, get_current_user_id
+from app.core.cost_guard import CostLimitExceeded
 from app.core.websocket_manager import manager
 from app.agents.mcp_agent import agent as mcp_agent
 from app.models.chat_message import ChatMessage
@@ -262,10 +263,19 @@ async def _exec_agent(
     loop = asyncio.get_running_loop()
     usage_box: dict = {}
     tool_names: list[str] = []
+    cost_running = 0.0
 
     def on_event(evt: dict):
+        nonlocal cost_running
         if evt.get("type") == "usage":
             usage_box.update(evt)
+            # 成本熔断：实时累计费用，超预算立即终止本次执行
+            from app.core.cost_guard import estimate_cost, budget_is_exceeded
+            cost_running += estimate_cost(
+                evt.get("input_tokens", 0), evt.get("output_tokens", 0)
+            )
+            if budget_is_exceeded(cost_running):
+                raise CostLimitExceeded()
         if evt.get("type") == "tool_call":
             tool_names.append(str(evt.get("name", "")))
         asyncio.run_coroutine_threadsafe(manager.send_json(client_id, evt), loop)
@@ -309,6 +319,17 @@ async def _exec_agent(
     await manager.send_json(client_id, {"type": "web_search_used", "used": used_web_search})
     # Agent 回答已由 answer 分片事件推送，这里只发结束标记
     await manager.send_stream(client_id, "", done=True)
+
+    # 成本记账：本轮实际用量累计到 Redis（供入口熔断检查）
+    try:
+        from app.core.cost_guard import record_usage
+        await record_usage(
+            user_id,
+            int(usage_box.get("input_tokens") or 0),
+            int(usage_box.get("output_tokens") or 0),
+        )
+    except Exception:
+        pass
 
     return (
         reply, used_web_search,
@@ -441,6 +462,20 @@ async def websocket_chat(websocket: WebSocket):
             reply = ""
             used_web_search = False
             if use_agent or web_search:
+                # 成本熔断：入口检查，超预算不启动 Agent
+                from app.core.cost_guard import check_budget
+                ok, used, budget = await check_budget(user_id)
+                if not ok:
+                    tip = (f"今日 token 预算已用尽（{used:,.0f} / {budget:,.0f}），"
+                           "请明天再试或联系管理员调高预算。")
+                    await manager.send_json(client_id, {"type": "answer", "content": tip})
+                    await manager.send_stream(client_id, "", done=True)
+                    ctx.append({"role": "assistant", "content": tip})
+                    async with async_session() as db:
+                        db.add(ChatMessage(user_id=user_id, session_id=session_id,
+                                           created_at=now_cn(), role="assistant", content=tip))
+                        await db.commit()
+                    continue
                 # Agent 模式：后台任务执行（不阻塞事件循环），同时并发监听 WebSocket，
                 # 用户对高危命令/执行计划的确认响应能立即送达（此前主循环被 to_thread 阻塞，
                 # 确认响应积压导致每次都要干等 120 秒超时）

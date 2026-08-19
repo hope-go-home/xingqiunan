@@ -22,6 +22,7 @@ from langchain.agents.middleware import ToolRetryMiddleware
 
 from app.agents.tools import build_tools
 from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY
+from app.core.cost_guard import CostLimitExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,11 @@ class McpAgent:
         role: 用户角色，admin 拥有高危工具（删除/移动/执行命令），普通用户自动过滤"""
         try:
             return asyncio.run(self._arun(user_input, user_id, history, on_event, planning, role))
+        except CostLimitExceeded as e:
+            # 成本熔断：预算用尽，终止执行（on_event 已推送提示，这里返回友好文案）
+            reply = "⚠️ 今日费用预算已用尽，本次执行已自动终止。"
+            _emit(on_event, {"type": "answer", "content": reply})
+            return reply
         except Exception as e:
             reply = f"Agent 执行出错: {e}"
             _emit(on_event, {"type": "answer", "content": reply})
