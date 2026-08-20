@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 
 import requests
+from sqlalchemy import text
 from typing import Any
 
 from app.core.config import (
@@ -218,8 +219,10 @@ def _create_task(user_id: int, title: str, task_type: str = "document_process", 
         try:
             with engine.connect() as conn:
                 row = conn.execute(
-                    "INSERT INTO tasks (title, description, status, task_type, user_id, created_at, updated_at) "
-                    "VALUES (:title, :desc, 'pending', :tt, :uid, NOW(), NOW()) RETURNING id",
+                    text(
+                        "INSERT INTO tasks (title, description, status, task_type, user_id, created_at, updated_at) "
+                        "VALUES (:title, :desc, 'pending', :tt, :uid, NOW(), NOW()) RETURNING id"
+                    ),
                     {"title": str(title)[:256], "desc": str(description or "")[:2000], "tt": task_type, "uid": user_id},
                 ).fetchone()
                 conn.commit()
@@ -251,14 +254,18 @@ def _list_tasks(user_id: int, status_filter: str = "") -> str:
             with engine.connect() as conn:
                 if status_filter:
                     rows = conn.execute(
-                        "SELECT id, title, status, task_type, created_at FROM tasks "
-                        "WHERE user_id = :uid AND status = :s ORDER BY created_at DESC LIMIT 20",
+                        text(
+                            "SELECT id, title, status, task_type, created_at FROM tasks "
+                            "WHERE user_id = :uid AND status = :s ORDER BY created_at DESC LIMIT 20"
+                        ),
                         {"uid": user_id, "s": status_filter},
                     ).fetchall()
                 else:
                     rows = conn.execute(
-                        "SELECT id, title, status, task_type, created_at FROM tasks "
-                        "WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20",
+                        text(
+                            "SELECT id, title, status, task_type, created_at FROM tasks "
+                            "WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20"
+                        ),
                         {"uid": user_id},
                     ).fetchall()
         finally:

@@ -17,4 +17,6 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="Asia/Shanghai",
     enable_utc=True,
+    # 关键：worker 启动时必须加载任务模块，否则队列消息无人消费
+    include=["app.tasks.file_tasks"],
 )
