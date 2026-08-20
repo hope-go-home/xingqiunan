@@ -1,16 +1,20 @@
 <!-- LoginView.vue — 登录 / 注册页。同一页面切换模式。 -->
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const mode = ref(0)        // 0=登录, 1=注册
 const form = reactive({ username: '', password: '' })
 const error = ref('')
 const submitting = ref(false)
+
+// 支持 /login?register=1：直接进入注册模式（已登录也放行，用于"注册新账号"）
+if (route.query.register === '1') mode.value = 1
 
 async function submit() {
   error.value = ''
@@ -20,9 +24,10 @@ async function submit() {
       await userStore.loginAction({ username: form.username, password: form.password })
       router.push('/dashboard')
     } else {
+      // 注册成功后自动登录（免二次输入），直接进入主页
       await userStore.registerAction({ username: form.username, password: form.password })
-      mode.value = 0
-      form.password = ''
+      await userStore.loginAction({ username: form.username, password: form.password })
+      router.push('/dashboard')
     }
   } catch (e) {
     error.value = e?.response?.data?.detail || e?.message || '操作失败'

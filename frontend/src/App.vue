@@ -67,7 +67,7 @@ function logout() {
         <div class="user-actions">
           <button class="user-menu-btn" @click="showUserMenu = !showUserMenu" title="账号管理">+</button>
           <div v-if="showUserMenu" class="user-dropdown">
-            <button @click="showUserMenu = false; router.push('/login')">注册新账号</button>
+            <button @click="showUserMenu = false; router.push('/login?register=1')">注册新账号</button>
             <button @click="showUserMenu = false; logout(); router.push('/login')">切换账号</button>
             <button @click="showUserMenu = false; logout()">退出登录</button>
           </div>

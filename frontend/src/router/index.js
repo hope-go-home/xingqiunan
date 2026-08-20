@@ -47,6 +47,11 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const user = useUserStore()
 
+  // 已登录但显式要求注册新账号（/login?register=1）→ 放行登录页
+  if (to.name === 'login' && to.query.register === '1') {
+    next()
+    return
+  }
   if (to.meta.requiresAuth && !user.token) {
     next('/login')
   } else if (to.name === 'login' && user.token) {
