@@ -123,16 +123,20 @@ def _user_workspace(user_id: int) -> str:
 
 
 def _safe_path(user_id: int, rel_path: str) -> str:
-    """把相对/绝对路径解析并校验必须落在该用户的工作区内，返回真实绝对路径"""
+    """把相对/绝对路径解析并校验必须落在该用户的工作区内，返回真实绝对路径。
+
+    跨平台：绝对路径（Windows 盘符或 POSIX / 开头）统一按"取文件名"映射回用户工作区，
+    防止跨用户读取；相对路径则直接拼接到用户工作区根下。
+    """
     if not rel_path or not isinstance(rel_path, str):
         raise ValueError("路径不能为空")
     root = os.path.realpath(_user_workspace(user_id))
-    # 显式拒绝跨盘符/UNC 路径，统一按相对工作区处理
     candidate = rel_path.replace("\\", "/")
-    if re.match(r"^[a-zA-Z]:", candidate) or candidate.startswith("//"):
-        full = os.path.realpath(os.path.join(root, os.path.basename(candidate)))
-    else:
-        full = os.path.realpath(os.path.join(root, candidate))
+    # 绝对路径（Windows 盘符 / UNC / POSIX / 开头）统一按"取文件名"映射回用户工作区，
+    # 防止跨用户读取；os.path.isabs 在 Windows 上不认 POSIX 路径，需显式判断 / 开头
+    if candidate.startswith("/") or re.match(r"^[a-zA-Z]:", candidate):
+        candidate = os.path.basename(candidate.rstrip("/"))
+    full = os.path.realpath(os.path.join(root, candidate))
     if full != root and not full.startswith(root + os.sep):
         raise ValueError(f"路径越界，仅允许操作自己的工作区目录: {root}")
     # 敏感文件黑名单：凭据/密钥/配置类一律禁止读写（防 Agent 读走工作区内敏感信息外泄）
