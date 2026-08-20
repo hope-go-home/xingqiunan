@@ -600,7 +600,7 @@ def build_tools(user_id: int) -> list:
     def write_file(file_path: str, content: str) -> str:
         """写入/覆盖工作区内的文件（支持自动创建目录）。参数 file_path（工作区内的相对路径，如 'scripts/demo.py'）、content（文件完整内容）"""
         try:
-            return _truncate(fs_tools._write_file(file_path, content))
+            return _truncate(fs_tools._write_file(user_id, file_path, content))
         except Exception as e:
             return f"写入失败: {e}"
 
@@ -609,7 +609,7 @@ def build_tools(user_id: int) -> list:
     def read_file(file_path: str) -> str:
         """读取工作区内文本文件内容。参数 file_path（工作区内相对路径），返回文件内容"""
         try:
-            return _truncate(fs_tools._read_file(file_path))
+            return _truncate(fs_tools._read_file(user_id, file_path))
         except Exception as e:
             return f"读取失败: {e}"
 
@@ -618,7 +618,7 @@ def build_tools(user_id: int) -> list:
     def list_workspace(dir_path: str = ".") -> str:
         """列出工作区目录内容（含文件大小与修改时间）。参数 dir_path（工作区内目录相对路径，默认根目录）"""
         try:
-            return _truncate(fs_tools._list_directory(dir_path))
+            return _truncate(fs_tools._list_directory(user_id, dir_path))
         except Exception as e:
             return f"列出失败: {e}"
 
@@ -627,7 +627,7 @@ def build_tools(user_id: int) -> list:
     def create_directory(dir_path: str) -> str:
         """在工作区内创建目录（可多级）。参数 dir_path（工作区内相对路径，如 'scripts/utils'）"""
         try:
-            return fs_tools._mkdir(dir_path)
+            return fs_tools._mkdir(user_id, dir_path)
         except Exception as e:
             return f"创建目录失败: {e}"
 
@@ -639,7 +639,7 @@ def build_tools(user_id: int) -> list:
             if not _user_confirm(fs_tools._confirm_handler,
                                  f"Agent 请求删除文件「{file_path}」，是否允许？"):
                 return "已取消（删除操作需人工确认）"
-            return fs_tools._delete(file_path)
+            return fs_tools._delete(user_id, file_path)
         except Exception as e:
             return f"删除失败: {e}"
 
@@ -651,7 +651,7 @@ def build_tools(user_id: int) -> list:
             if not _user_confirm(fs_tools._confirm_handler,
                                  f"Agent 请求移动文件「{src_path}」→「{dst_path}」，是否允许？"):
                 return "已取消（移动操作需人工确认）"
-            return fs_tools._move(src_path, dst_path)
+            return fs_tools._move(user_id, src_path, dst_path)
         except Exception as e:
             return f"移动失败: {e}"
 
@@ -663,7 +663,7 @@ def build_tools(user_id: int) -> list:
             if not _user_confirm(fs_tools._confirm_handler,
                                  f"Agent 请求执行命令，是否允许？\n$ {command}"):
                 return "已取消（命令执行需人工确认）"
-            return _truncate(fs_tools._run_command(command))
+            return _truncate(fs_tools._run_command(user_id, command))
         except Exception as e:
             return f"命令执行失败: {e}"
 

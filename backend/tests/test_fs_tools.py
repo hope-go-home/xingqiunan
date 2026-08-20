@@ -27,7 +27,7 @@ def ws(tmp_path, monkeypatch):
 ])
 def test_deny_bypass_channels(ws, cmd):
     """S6: 白名单内的程序但带内联执行/命令链 → 直接拒绝"""
-    out = fs_tools._run_command(cmd)
+    out = fs_tools._run_command(7, cmd)
     assert "安全策略拒绝" in out
 
 
@@ -43,24 +43,24 @@ def test_deny_bypass_channels(ws, cmd):
 ])
 def test_deny_system_commands(ws, cmd):
     """S6: 系统级命令根本不在白名单 → 拒绝"""
-    out = fs_tools._run_command(cmd)
+    out = fs_tools._run_command(7, cmd)
     assert "不在白名单" in out or "安全策略拒绝" in out
 
 
 def test_allow_python_script(ws):
     """S6: 白名单内安全用法（python 脚本）正常放行"""
-    fs_tools._write_file("ok.py", "print('hi')")
-    out = fs_tools._run_command(f"{PY_CMD} ok.py")
+    fs_tools._write_file(7, "ok.py", "print('hi')")
+    out = fs_tools._run_command(7, f"{PY_CMD} ok.py")
     assert "hi" in out
 
 
 def test_allow_git_status(ws):
-    out = fs_tools._run_command("git status")
+    out = fs_tools._run_command(7, "git status")
     assert out and "失败" not in out and "拒绝" not in out
 
 
 def test_git_disallowed_subcommand(ws):
-    out = fs_tools._run_command("git reset --hard HEAD")
+    out = fs_tools._run_command(7, "git reset --hard HEAD")
     assert "不在白名单" in out
 
 
@@ -79,7 +79,7 @@ def test_git_disallowed_subcommand(ws):
 def test_sensitive_paths_blocked_read(ws, path):
     """S7: 敏感文件关键词路径读取被拒绝"""
     with pytest.raises(ValueError, match="敏感文件黑名单"):
-        fs_tools._read_file(path)
+        fs_tools._read_file(7, path)
 
 
 @pytest.mark.parametrize("path", [
@@ -91,20 +91,20 @@ def test_sensitive_paths_blocked_read(ws, path):
 def test_sensitive_paths_blocked_write(ws, path):
     """S7: 敏感文件关键词路径写入被拒绝"""
     with pytest.raises(ValueError, match="敏感文件黑名单"):
-        fs_tools._write_file(path, "SECRET=1")
+        fs_tools._write_file(7, path, "SECRET=1")
 
 
 def test_normal_files_not_affected(ws):
     """S7: 普通文件读写不受影响"""
-    assert "已写入" in fs_tools._write_file("demo.txt", "hello")
-    assert "hello" in fs_tools._read_file("demo.txt")
+    assert "已写入" in fs_tools._write_file(7, "demo.txt", "hello")
+    assert "hello" in fs_tools._read_file(7, "demo.txt")
 
 
 # ─── 路径沙箱 ───
 
 def test_path_traversal_blocked(ws):
     with pytest.raises(ValueError, match="越界"):
-        fs_tools._write_file("../escape.txt", "x")
+        fs_tools._write_file(7, "../escape.txt", "x")
 
 
 def test_absolute_path_outside_blocked(ws, tmp_path):
@@ -112,36 +112,36 @@ def test_absolute_path_outside_blocked(ws, tmp_path):
     outside = tmp_path.parent / "outside.txt"
     outside.write_text("外部内容", encoding="utf-8")
     with pytest.raises((FileNotFoundError, ValueError)):
-        fs_tools._read_file(str(outside))
+        fs_tools._read_file(7, str(outside))
 
 
 # ─── 人工确认机制 ───
 
 def test_high_risk_command_requires_confirmation(ws):
     """高危命令在无确认通道时被取消"""
-    out = fs_tools._run_command("git push --force origin main")
+    out = fs_tools._run_command(7, "git push --force origin main")
     assert "确认" in out or "拒绝" in out
 
 
 def test_confirm_handler_approve(ws, monkeypatch):
     """确认回调返回 True → 命令执行"""
-    fs_tools._write_file("p.py", "print('approved')")
+    fs_tools._write_file(7, "p.py", "print('approved')")
     monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: True)
-    out = fs_tools._run_command(f"{PY_CMD} p.py")
+    out = fs_tools._run_command(7, f"{PY_CMD} p.py")
     assert "approved" in out
 
 
 def test_confirm_handler_deny(ws, monkeypatch):
     """确认回调返回 False → 命令被拒绝"""
     monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: False)
-    out = fs_tools._run_command("git push --force origin main")
+    out = fs_tools._run_command(7, "git push --force origin main")
     assert "拒绝" in out
 
 
 def test_confirm_handler_clear_after_use(ws, monkeypatch):
     """确认回调为 None → 高危命令直接取消"""
     monkeypatch.setattr(fs_tools, "_confirm_handler", None)
-    out = fs_tools._run_command("git push --force origin main")
+    out = fs_tools._run_command(7, "git push --force origin main")
     assert "确认通道" in out
 
 

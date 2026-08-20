@@ -117,19 +117,24 @@ def _truncate(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
     return s[:limit] + f"\n…（结果过长已截断，共 {len(s)} 字符）"
 
 
-def _safe_path(rel_path: str) -> str:
-    """把相对/绝对路径解析并校验必须落在 WORKSPACE_DIR 内，返回真实绝对路径"""
+def _user_workspace(user_id: int) -> str:
+    """用户私有工作区根目录：WORKSPACE_DIR/user_{user_id}（多租户隔离）"""
+    return os.path.join(WORKSPACE_DIR, f"user_{user_id}")
+
+
+def _safe_path(user_id: int, rel_path: str) -> str:
+    """把相对/绝对路径解析并校验必须落在该用户的工作区内，返回真实绝对路径"""
     if not rel_path or not isinstance(rel_path, str):
         raise ValueError("路径不能为空")
-    root = os.path.realpath(WORKSPACE_DIR)
-    # 显式拒绝跨盘符/UNC 路径，统一按相对 WORKSPACE_DIR 处理
+    root = os.path.realpath(_user_workspace(user_id))
+    # 显式拒绝跨盘符/UNC 路径，统一按相对工作区处理
     candidate = rel_path.replace("\\", "/")
     if re.match(r"^[a-zA-Z]:", candidate) or candidate.startswith("//"):
         full = os.path.realpath(os.path.join(root, os.path.basename(candidate)))
     else:
         full = os.path.realpath(os.path.join(root, candidate))
     if full != root and not full.startswith(root + os.sep):
-        raise ValueError(f"路径越界，仅允许操作工作区目录: {WORKSPACE_DIR}")
+        raise ValueError(f"路径越界，仅允许操作自己的工作区目录: {root}")
     # 敏感文件黑名单：凭据/密钥/配置类一律禁止读写（防 Agent 读走工作区内敏感信息外泄）
     low = candidate.lower()
     if any(s in low for s in SENSITIVE_FILE_KEYWORDS):
@@ -137,8 +142,8 @@ def _safe_path(rel_path: str) -> str:
     return full
 
 
-def _ensure_root() -> None:
-    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+def _ensure_root(user_id: int) -> None:
+    os.makedirs(_user_workspace(user_id), exist_ok=True)
 
 
 def _check_write_content(content: str) -> None:
@@ -150,10 +155,10 @@ def _check_write_content(content: str) -> None:
             raise ValueError("内容包含危险系统指令特征，已拦截写入")
 
 
-def _write_file(rel_path: str, content: str) -> str:
+def _write_file(user_id: int, rel_path: str, content: str) -> str:
     """写入文件（覆盖），目录不存在则自动创建"""
-    _ensure_root()
-    full = _safe_path(rel_path)
+    _ensure_root(user_id)
+    full = _safe_path(user_id, rel_path)
     if os.path.isdir(full):
         raise ValueError(f"目标路径是目录: {rel_path}")
     _check_write_content(content)
@@ -165,9 +170,9 @@ def _write_file(rel_path: str, content: str) -> str:
     return f"已写入 {len(str(content or ''))} 字符到 {rel_path}"
 
 
-def _read_file(rel_path: str, max_chars: int = 4000) -> str:
+def _read_file(user_id: int, rel_path: str, max_chars: int = 4000) -> str:
     """读取文本文件内容（截断返回）"""
-    full = _safe_path(rel_path)
+    full = _safe_path(user_id, rel_path)
     if not os.path.isfile(full):
         raise FileNotFoundError(f"文件不存在: {rel_path}")
     size = os.path.getsize(full)
@@ -178,9 +183,9 @@ def _read_file(rel_path: str, max_chars: int = 4000) -> str:
     return DATA_BEGIN + text + DATA_END
 
 
-def _list_directory(rel_path: str = ".") -> str:
+def _list_directory(user_id: int, rel_path: str = ".") -> str:
     """列出目录内容（含文件大小/修改时间）"""
-    full = _safe_path(rel_path)
+    full = _safe_path(user_id, rel_path)
     if not os.path.isdir(full):
         raise NotADirectoryError(f"不是目录: {rel_path}")
     items = []
@@ -198,14 +203,14 @@ def _list_directory(rel_path: str = ".") -> str:
                 items.append(f"       {e.name}  ({size} B, {mtime})")
     except OSError as e:
         return f"列出目录失败: {e}"
-    rel = rel_path if rel_path not in (".", "") else WORKSPACE_DIR
+    rel = rel_path if rel_path not in (".", "") else _user_workspace(user_id)
     return "\n".join([f"📁 {rel}/"] + items) if items else f"📁 {rel}/（空目录）"
 
 
-def _mkdir(rel_path: str) -> str:
+def _mkdir(user_id: int, rel_path: str) -> str:
     """创建目录（可多级）"""
-    _ensure_root()
-    full = _safe_path(rel_path)
+    _ensure_root(user_id)
+    full = _safe_path(user_id, rel_path)
     if os.path.exists(full):
         if os.path.isdir(full):
             return f"目录已存在: {rel_path}"
@@ -214,9 +219,9 @@ def _mkdir(rel_path: str) -> str:
     return f"已创建目录: {rel_path}"
 
 
-def _delete(rel_path: str) -> str:
+def _delete(user_id: int, rel_path: str) -> str:
     """删除文件或空目录"""
-    full = _safe_path(rel_path)
+    full = _safe_path(user_id, rel_path)
     if os.path.isdir(full):
         os.rmdir(full)  # 只允许删空目录，避免误删整棵目录树
         return f"已删除空目录: {rel_path}"
@@ -226,10 +231,10 @@ def _delete(rel_path: str) -> str:
     raise FileNotFoundError(f"路径不存在: {rel_path}")
 
 
-def _move(src_path: str, dst_path: str) -> str:
-    """移动/重命名文件（目标也必须在工作区内）"""
-    src = _safe_path(src_path)
-    dst = _safe_path(dst_path)
+def _move(user_id: int, src_path: str, dst_path: str) -> str:
+    """移动/重命名文件（目标也必须在同一用户工作区内）"""
+    src = _safe_path(user_id, src_path)
+    dst = _safe_path(user_id, dst_path)
     if not os.path.exists(src):
         raise FileNotFoundError(f"源路径不存在: {src_path}")
     parent = os.path.dirname(dst)
@@ -239,8 +244,8 @@ def _move(src_path: str, dst_path: str) -> str:
     return f"已移动: {src_path} → {dst_path}"
 
 
-def _run_command(command: str) -> str:
-    """在授权目录内执行白名单命令（shell=False），返回 stdout+stderr"""
+def _run_command(user_id: int, command: str) -> str:
+    """在授权目录（用户工作区）内执行白名单命令（shell=False），返回 stdout+stderr"""
     if not command or not str(command).strip():
         raise ValueError("命令不能为空")
     try:
@@ -276,10 +281,12 @@ def _run_command(command: str) -> str:
     if not exe:
         return f"未找到可执行程序: {parts[0]}"
 
+    cwd = _user_workspace(user_id)
+    os.makedirs(cwd, exist_ok=True)
     try:
         result = subprocess.run(
             [exe, *parts[1:]],
-            cwd=WORKSPACE_DIR,
+            cwd=cwd,
             capture_output=True,
             text=True,
             encoding="utf-8",

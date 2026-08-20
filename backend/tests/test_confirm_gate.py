@@ -32,17 +32,17 @@ def test_run_command_approved(tool_map, monkeypatch):
 
 def test_delete_requires_confirm(tool_map, monkeypatch):
     from app.agents import fs_tools
-    fs_tools._write_file("conf_del.txt", "keep me")
+    fs_tools._write_file(7, "conf_del.txt", "keep me")
     monkeypatch.setattr(fs_tools, "_confirm_handler", None)
     out = tool_map["delete_file"].invoke({"file_path": "conf_del.txt"})
     assert "已取消" in out
-    assert "keep me" in fs_tools._read_file("conf_del.txt")
+    assert "keep me" in fs_tools._read_file(7, "conf_del.txt")
 
 
 def test_move_requires_confirm(tool_map, monkeypatch):
     from app.agents import fs_tools
-    fs_tools._write_file("conf_src.txt", "data")
+    fs_tools._write_file(7, "conf_src.txt", "data")
     monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: False)
     out = tool_map["move_file"].invoke({"src_path": "conf_src.txt", "dst_path": "conf_dst.txt"})
     assert "已取消" in out
-    assert "conf_src.txt" in fs_tools._list_directory(".")
+    assert "conf_src.txt" in fs_tools._list_directory(7, ".")
