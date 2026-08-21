@@ -1,5 +1,6 @@
 # 数据库模块：创建异步 PostgreSQL 连接，提供 ORM 基类和会话管理
 
+from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 from app.core.config import DATABASE_URL
@@ -23,6 +24,14 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """应用启动时调用，自动创建所有继承 Base 的表"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """应用启动时调用：用 Alembic 管理表结构（替代 create_all）"""
+    import asyncio
+    from alembic.config import Config
+    from alembic import command
+
+    alembic_cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+
+    def _run():
+        command.upgrade(alembic_cfg, "head")
+
+    await asyncio.to_thread(_run)
