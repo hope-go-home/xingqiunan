@@ -85,17 +85,24 @@ def _audit_write(user_id: int, tool_name: str, args: tuple, kwargs: dict, result
 
 
 def _audited(user_id: int):
-    """工具审计装饰器：记录 用户/工具/参数/结果/耗时"""
+    """工具审计装饰器：记录 用户/工具/参数/结果/耗时 + Prometheus 指标"""
     def deco(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
+            from app.core.metrics import tool_calls_total, tool_call_duration_seconds
             start = time.time()
             try:
                 result = fn(*args, **kwargs)
-                _audit_write(user_id, fn.__name__, args, kwargs, result, time.time() - start)
+                duration = time.time() - start
+                _audit_write(user_id, fn.__name__, args, kwargs, result, duration)
+                tool_calls_total.labels(tool_name=fn.__name__, status="success").inc()
+                tool_call_duration_seconds.labels(tool_name=fn.__name__).observe(duration)
                 return result
             except Exception as e:
-                _audit_write(user_id, fn.__name__, args, kwargs, f"异常: {e}", time.time() - start)
+                duration = time.time() - start
+                _audit_write(user_id, fn.__name__, args, kwargs, f"异常: {e}", duration)
+                tool_calls_total.labels(tool_name=fn.__name__, status="error").inc()
+                tool_call_duration_seconds.labels(tool_name=fn.__name__).observe(duration)
                 raise
         return wrapper
     return deco

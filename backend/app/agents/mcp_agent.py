@@ -182,16 +182,39 @@ def set_plan_confirm_handler(fn: Callable[[str, list[dict]], bool] | None):
 
 @resilient_call("dashscope")
 def _llm_invoke(llm, prompt: str):
-    """带重试+熔断的 LLM 同步调用"""
-    return llm.invoke(prompt)
+    """带重试+熔断的 LLM 同步调用 + Prometheus 指标"""
+    from app.core.metrics import llm_calls_total, llm_call_duration_seconds, llm_tokens_total
+    import time
+    start = time.time()
+    try:
+        resp = llm.invoke(prompt)
+        duration = time.time() - start
+        model = getattr(llm, "model_name", "unknown")
+        llm_calls_total.labels(model=model, status="success").inc()
+        llm_call_duration_seconds.labels(model=model).observe(duration)
+        # token 用量（如果响应包含 usage_metadata）
+        usage = getattr(resp, "usage_metadata", None) or {}
+        if usage:
+            llm_tokens_total.labels(model=model, direction="input").inc(usage.get("input_tokens", 0))
+            llm_tokens_total.labels(model=model, direction="output").inc(usage.get("output_tokens", 0))
+        return resp
+    except Exception as e:
+        duration = time.time() - start
+        model = getattr(llm, "model_name", "unknown")
+        llm_calls_total.labels(model=model, status="error").inc()
+        llm_call_duration_seconds.labels(model=model).observe(duration)
+        raise
 
 
 def _llm_invoke_with_failover(prompt: str):
-    """主模型调用，失败自动切备用模型"""
+    """主模型调用，失败自动切备用模型 + failover 指标"""
+    from app.core.metrics import llm_calls_total
     try:
         return _llm_invoke(_create_llm(), prompt)
     except Exception as e:
         logger.warning("主模型调用失败 (%s)，尝试备用模型", e)
+        model = getattr(_create_llm(), "model_name", "unknown")
+        llm_calls_total.labels(model=model, status="failover").inc()
         fallback = _create_llm_fallback()
         if fallback is None:
             raise
