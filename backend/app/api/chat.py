@@ -250,10 +250,10 @@ def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: di
 
 
 async def _exec_agent(
-    client_id: str,
+    user_id: str,
     user_input: str,
     web_search: bool,
-    user_id: int,
+    user_id_int: int,
     ctx: list[dict] | None,
     use_planning: bool,
 ):
@@ -278,7 +278,7 @@ async def _exec_agent(
                 raise CostLimitExceeded()
         if evt.get("type") == "tool_call":
             tool_names.append(str(evt.get("name", "")))
-        asyncio.run_coroutine_threadsafe(manager.send_json(client_id, evt), loop)
+        asyncio.run_coroutine_threadsafe(manager.send_json(user_id, evt), loop)
 
     # 联网搜索开关：强制 Agent 先调用 web_search 获取最新信息再回答
     effective_input = user_input
@@ -289,7 +289,7 @@ async def _exec_agent(
         )
 
     reply = await asyncio.to_thread(
-        mcp_agent.process, effective_input, user_id, ctx, on_event, use_planning
+        mcp_agent.process, effective_input, user_id_int, ctx, on_event, use_planning
     )
 
     used_web_search = False
@@ -298,17 +298,17 @@ async def _exec_agent(
         try:
             from app.agents.tools import _web_search
             search_result = _web_search(user_input)
-            await manager.send_json(client_id, {
+            await manager.send_json(user_id, {
                 "type": "tool_call", "name": "web_search", "args": {"query": user_input},
             })
-            await manager.send_json(client_id, {
+            await manager.send_json(user_id, {
                 "type": "tool_result", "name": "web_search", "result": search_result[:400],
             })
             used_web_search = True
             reply = await asyncio.to_thread(
                 mcp_agent.process,
                 effective_input + "\n\n[搜索结果参考]\n" + search_result,
-                user_id, ctx, on_event, use_planning,
+                user_id_int, ctx, on_event, use_planning,
             )
         except Exception:
             pass
@@ -316,15 +316,15 @@ async def _exec_agent(
         used_web_search = True
 
     # 明确标记本次是否使用了联网搜索（前端据此展示徽标），未用也发送
-    await manager.send_json(client_id, {"type": "web_search_used", "used": used_web_search})
+    await manager.send_json(user_id, {"type": "web_search_used", "used": used_web_search})
     # Agent 回答已由 answer 分片事件推送，这里只发结束标记
-    await manager.send_stream(client_id, "", done=True)
+    await manager.send_stream(user_id, "", done=True)
 
     # 成本记账：本轮实际用量累计到 Redis（供入口熔断检查）
     try:
         from app.core.cost_guard import record_usage
         await record_usage(
-            user_id,
+            user_id_int,
             int(usage_box.get("input_tokens") or 0),
             int(usage_box.get("output_tokens") or 0),
         )
@@ -352,8 +352,8 @@ async def websocket_chat(websocket: WebSocket):
         await websocket.close(code=4401, reason="Unauthorized")
         return
 
-    client_id = uuid.uuid4().hex[:8]
-    await manager.connect(client_id, websocket)
+    user_id = str(user_id)  # 转字符串，统一作为连接标识
+    await manager.connect(user_id, websocket)
     session_id = ""
     current_session = ""
     ctx: list[dict] = []
@@ -362,7 +362,7 @@ async def websocket_chat(websocket: WebSocket):
     # session 级权限：用户勾选"本次会话不再询问"后，同类命令自动放行
     from app.agents import fs_tools
     confirm_events: dict[str, tuple] = {}
-    allowed_commands: dict[str, set] = {}  # {client_id: {command_key, ...}}
+    allowed_commands: dict[str, set] = {}  # {user_id: {command_key, ...}}
     loop = asyncio.get_running_loop()
 
     def _await_future(fut, timeout: float):
@@ -375,7 +375,7 @@ async def websocket_chat(websocket: WebSocket):
     def make_confirm_handler():
         def handler(command: str, user_id: int, prompt: str) -> bool:
             # session 级权限：用户勾选"本次会话不再询问"后，同类命令自动放行
-            if command in allowed_commands.get(client_id, set()):
+            if command in allowed_commands.get(user_id, set()):
                 return True
             cid = uuid.uuid4().hex[:12]
             evt = asyncio.Event()
@@ -383,7 +383,7 @@ async def websocket_chat(websocket: WebSocket):
             confirm_events[cid] = (evt, box)
             try:
                 _await_future(asyncio.run_coroutine_threadsafe(
-                    manager.send_json(client_id, {
+                    manager.send_json(user_id, {
                         "type": "confirm_request",
                         "id": cid,
                         "prompt": prompt,
@@ -393,7 +393,7 @@ async def websocket_chat(websocket: WebSocket):
                 _await_future(asyncio.run_coroutine_threadsafe(evt.wait(), loop), 120)
                 # 用户允许且勾选了"本次会话不再询问" → 记入 session 权限
                 if box["allowed"] and box.get("allow_for_session"):
-                    allowed_commands.setdefault(client_id, set()).add(command)
+                    allowed_commands.setdefault(user_id, set()).add(command)
                 return box["allowed"]
             except Exception:
                 return False
@@ -415,7 +415,7 @@ async def websocket_chat(websocket: WebSocket):
             plan_confirm_events[cid] = (evt, box)
             try:
                 _await_future(asyncio.run_coroutine_threadsafe(
-                    manager.send_json(client_id, {
+                    manager.send_json(user_id, {
                         "type": "plan_confirm_request",
                         "id": cid,
                         "steps": [{"name": p["name"], "action": p["action"]} for p in plan],
@@ -473,8 +473,8 @@ async def websocket_chat(websocket: WebSocket):
                 if not ok:
                     tip = (f"今日费用预算已用尽（{used:,.2f} / {COST_DAILY_BUDGET:,.2f} 元），"
                            "请明天再试或调高预算。")
-                    await manager.send_json(client_id, {"type": "answer", "content": tip})
-                    await manager.send_stream(client_id, "", done=True)
+                    await manager.send_json(user_id, {"type": "answer", "content": tip})
+                    await manager.send_stream(user_id, "", done=True)
                     ctx.append({"role": "assistant", "content": tip})
                     async with async_session() as db:
                         db.add(ChatMessage(user_id=user_id, session_id=session_id,
@@ -485,7 +485,7 @@ async def websocket_chat(websocket: WebSocket):
                 # 用户对高危命令/执行计划的确认响应能立即送达（此前主循环被 to_thread 阻塞，
                 # 确认响应积压导致每次都要干等 120 秒超时）
                 agent_task = asyncio.create_task(
-                    _exec_agent(client_id, user_input, web_search, user_id, effective[:-1], use_planning)
+                    _exec_agent(user_id, user_input, web_search, user_id, effective[:-1], use_planning)
                 )
                 ws_task = asyncio.create_task(websocket.receive_text())
                 while True:
@@ -522,7 +522,7 @@ async def websocket_chat(websocket: WebSocket):
                             pass
                         except Exception:
                             pass
-                        await manager.send_json(client_id, {"type": "agent_stopped"})
+                        await manager.send_json(user_id, {"type": "agent_stopped"})
                         break
                     else:
                         logger.info("[WS] Agent 执行中忽略非确认消息: %s", str(msg2)[:80])
@@ -535,8 +535,8 @@ async def websocket_chat(websocket: WebSocket):
                     um = getattr(chunk, "usage_metadata", None) or {}
                     in_tokens = um.get("input_tokens", in_tokens) or in_tokens
                     out_tokens = um.get("output_tokens", out_tokens) or out_tokens
-                    await manager.send_stream(client_id, content, done=False)
-                await manager.send_stream(client_id, "", done=True)
+                    await manager.send_stream(user_id, content, done=False)
+                await manager.send_stream(user_id, "", done=True)
                 reply = full_reply
 
             ctx.append({"role": "assistant", "content": reply})
@@ -550,7 +550,7 @@ async def websocket_chat(websocket: WebSocket):
                 await db.commit()
 
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        manager.disconnect(user_id)
     except Exception:
         logger.exception("WebSocket 处理异常，连接已关闭")
-        manager.disconnect(client_id)
+        manager.disconnect(user_id)
