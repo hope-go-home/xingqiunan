@@ -18,14 +18,14 @@ def test_run_command_requires_confirm(tool_map, monkeypatch):
 
 def test_run_command_denied_by_user(tool_map, monkeypatch):
     from app.agents import fs_tools
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: False)
+    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: False)
     out = tool_map["run_command"].invoke({"command": "echo hello"})
     assert "已取消" in out
 
 
 def test_run_command_approved(tool_map, monkeypatch):
     from app.agents import fs_tools
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: True)
+    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: True)
     out = tool_map["run_command"].invoke({"command": "echo hello"})
     assert "hello" in out
 
@@ -42,7 +42,7 @@ def test_delete_requires_confirm(tool_map, monkeypatch):
 def test_move_requires_confirm(tool_map, monkeypatch):
     from app.agents import fs_tools
     fs_tools._write_file(7, "conf_src.txt", "data")
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: False)
+    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: False)
     out = tool_map["move_file"].invoke({"src_path": "conf_src.txt", "dst_path": "conf_dst.txt"})
     assert "已取消" in out
     assert "conf_src.txt" in fs_tools._list_directory(7, ".")

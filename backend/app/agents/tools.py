@@ -61,7 +61,8 @@ def _audit_sanitize(obj: Any, depth: int = 0) -> Any:
     return obj
 
 
-def _audit_write(user_id: int, tool_name: str, args: tuple, kwargs: dict, result: Any, duration: float) -> None:
+def _audit_write(user_id: int, tool_name: str, args: tuple, kwargs: dict, result: Any, duration: float,
+                  extra: dict | None = None) -> None:
     """写入一条审计记录（JSONL append，线程安全）"""
     try:
         audit_dir = os.path.join(LOG_DIR, "audit")
@@ -71,9 +72,11 @@ def _audit_write(user_id: int, tool_name: str, args: tuple, kwargs: dict, result
             "user_id": user_id,
             "tool": tool_name,
             "args": _audit_sanitize({"a": list(args), "kw": kwargs}),
-            "result": _audit_sanitize(str(result)[:500]),
+            "result": _audit_sanitize(str(result)[:1000]),
             "duration_s": round(duration, 3),
         }
+        if extra:
+            rec.update(extra)
         with _audit_lock:
             with open(os.path.join(audit_dir, "tool_calls.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -98,12 +101,12 @@ def _audited(user_id: int):
     return deco
 
 
-def _user_confirm(confirm_handler, prompt: str) -> bool:
-    """普通用户高危操作逐次人工确认；无确认通道时拒绝（Claude Code 权限模式）"""
+def _user_confirm(confirm_handler, command: str, user_id: int, prompt: str) -> bool:
+    """Claude Code 权限模式：高危操作人工确认，支持 session 级免重复确认"""
     if confirm_handler is None:
         return False
     try:
-        return bool(confirm_handler(prompt))
+        return bool(confirm_handler(command, user_id, prompt))
     except Exception:
         return False
 
@@ -454,6 +457,10 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
         is_url = audio_input.startswith(("http://", "https://"))
 
         if is_url:
+            from app.agents.netguard import validate_public_url
+            ok, reason = validate_public_url(audio_input)
+            if not ok:
+                return f"URL 被安全策略拒绝（SSRF 防护）: {reason}"
             submit_resp = requests.post(
                 "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -643,7 +650,7 @@ def build_tools(user_id: int) -> list:
     def delete_file(file_path: str) -> str:
         """删除工作区内的文件或空目录。参数 file_path（工作区内相对路径）"""
         try:
-            if not _user_confirm(fs_tools._confirm_handler,
+            if not _user_confirm(fs_tools._confirm_handler, f"delete_file {file_path}", user_id,
                                  f"Agent 请求删除文件「{file_path}」，是否允许？"):
                 return "已取消（删除操作需人工确认）"
             return fs_tools._delete(user_id, file_path)
@@ -655,7 +662,7 @@ def build_tools(user_id: int) -> list:
     def move_file(src_path: str, dst_path: str) -> str:
         """移动或重命名工作区内文件。参数 src_path（源相对路径）、dst_path（目标相对路径）"""
         try:
-            if not _user_confirm(fs_tools._confirm_handler,
+            if not _user_confirm(fs_tools._confirm_handler, f"move_file {src_path} {dst_path}", user_id,
                                  f"Agent 请求移动文件「{src_path}」→「{dst_path}」，是否允许？"):
                 return "已取消（移动操作需人工确认）"
             return fs_tools._move(user_id, src_path, dst_path)
@@ -667,7 +674,7 @@ def build_tools(user_id: int) -> list:
     def run_command(command: str) -> str:
         """在授权工作区目录内执行白名单命令（python/pip/git/node/npm 等，shell 命令如 ls 不可用）。参数 command（完整命令字符串，如 'python scripts/demo.py'）"""
         try:
-            if not _user_confirm(fs_tools._confirm_handler,
+            if not _user_confirm(fs_tools._confirm_handler, f"run_command {command}", user_id,
                                  f"Agent 请求执行命令，是否允许？\n$ {command}"):
                 return "已取消（命令执行需人工确认）"
             return _truncate(fs_tools._run_command(user_id, command))

@@ -275,7 +275,7 @@ def _run_command(user_id: int, command: str) -> str:
         if _confirm_handler is None:
             return "该命令需要人工确认，但当前连接没有确认通道，已取消执行"
         try:
-            allowed = _confirm_handler(f"Agent 请求执行命令，是否允许？\n$ {command}")
+            allowed = _confirm_handler(command, user_id, f"Agent 请求执行命令，是否允许？\n$ {command}")
         except Exception:
             allowed = False
         if not allowed:

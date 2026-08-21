@@ -239,6 +239,7 @@ def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: di
         if cid in confirm_events:
             evt, box = confirm_events[cid]
             box["allowed"] = bool(msg.get("allow"))
+            box["allow_for_session"] = bool(msg.get("allow_for_session"))
             evt.set()
     elif msg.get("type") == "plan_confirm_response":
         cid = str(msg.get("id", ""))
@@ -358,8 +359,10 @@ async def websocket_chat(websocket: WebSocket):
     ctx: list[dict] = []
 
     # 高危命令人工确认机制：fs_tools 回调 → 推送确认请求到前端 → 等待用户响应
+    # session 级权限：用户勾选"本次会话不再询问"后，同类命令自动放行
     from app.agents import fs_tools
     confirm_events: dict[str, tuple] = {}
+    allowed_commands: dict[str, set] = {}  # {client_id: {command_key, ...}}
     loop = asyncio.get_running_loop()
 
     def _await_future(fut, timeout: float):
@@ -370,10 +373,13 @@ async def websocket_chat(websocket: WebSocket):
             fut.cancel()
 
     def make_confirm_handler():
-        def handler(prompt: str) -> bool:
+        def handler(command: str, user_id: int, prompt: str) -> bool:
+            # session 级权限：用户勾选"本次会话不再询问"后，同类命令自动放行
+            if command in allowed_commands.get(client_id, set()):
+                return True
             cid = uuid.uuid4().hex[:12]
             evt = asyncio.Event()
-            box = {"allowed": False}
+            box = {"allowed": False, "allow_for_session": False}
             confirm_events[cid] = (evt, box)
             try:
                 _await_future(asyncio.run_coroutine_threadsafe(
@@ -381,9 +387,13 @@ async def websocket_chat(websocket: WebSocket):
                         "type": "confirm_request",
                         "id": cid,
                         "prompt": prompt,
+                        "command": command,
                     }), loop), 5)
                 # 等待用户确认（最多 120 秒，超时视为拒绝）
                 _await_future(asyncio.run_coroutine_threadsafe(evt.wait(), loop), 120)
+                # 用户允许且勾选了"本次会话不再询问" → 记入 session 权限
+                if box["allowed"] and box.get("allow_for_session"):
+                    allowed_commands.setdefault(client_id, set()).add(command)
                 return box["allowed"]
             except Exception:
                 return False

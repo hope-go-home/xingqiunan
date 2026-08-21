@@ -25,6 +25,7 @@ const connStatus = ref('idle')
 const connError = ref('')
 const currentSessionId = ref('')
 const pendingConfirm = ref(null)
+const allowForSession = ref(false)
 const pendingPlan = ref(null)
 const showSkills = ref(false)
 const skills = ref([])
@@ -228,8 +229,9 @@ function selectSkill(s) {
 
 function respondConfirm(allow) {
   if (!pendingConfirm.value) return
-  getClient().send({ type: 'confirm_response', id: pendingConfirm.value.id, allow })
+  getClient().send({ type: 'confirm_response', id: pendingConfirm.value.id, allow, allow_for_session: allowForSession.value })
   pendingConfirm.value = null
+  allowForSession.value = false
 }
 function respondPlan(allow) {
   if (!pendingPlan.value) return
@@ -345,6 +347,10 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
           <div class="confirm-icon">⚠️</div>
           <div class="confirm-title">需要人工确认</div>
           <div class="confirm-prompt">{{ pendingConfirm.prompt }}</div>
+          <label class="confirm-checkbox">
+            <input type="checkbox" v-model="allowForSession" />
+            <span>本次会话不再询问同类操作</span>
+          </label>
           <div class="confirm-actions">
             <button class="btn btn-ghost confirm-btn" @click="respondConfirm(false)">拒绝</button>
             <button class="btn btn-danger confirm-btn" @click="respondConfirm(true)">允许执行</button>
@@ -479,6 +485,8 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 }
 .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .confirm-btn { padding: 8px 18px; }
+.confirm-checkbox { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; font-size: 13px; color: var(--text-muted); cursor: pointer; }
+.confirm-checkbox input { width: 16px; height: 16px; accent-color: var(--crimson); cursor: pointer; }
 
 /* 规划确认弹窗：步骤列表 */
 .plan-modal { width: 520px; }
