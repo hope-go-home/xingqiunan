@@ -33,6 +33,9 @@ aiofiles
 # PyMuPDF
 # python-docx
 
+# 可靠性（重试/熔断/限流）
+tenacity>=8.2.0
+
 # ===== 开发/测试 =====
 pytest
 pytest-asyncio

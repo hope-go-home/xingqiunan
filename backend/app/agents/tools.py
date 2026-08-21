@@ -347,6 +347,19 @@ def _add_knowledge(user_id: int, text: str) -> str:
 
 # === 多模态工具（视觉理解 + OCR + 语音识别）===
 
+from app.core.resilience import resilient_call
+
+
+@resilient_call("bocha")
+def _bocha_request(query: str, top_k: int = 5):
+    """带重试+熔断的博查 API 请求"""
+    return requests.post(
+        "https://api.bochaai.com/v1/web-search",
+        headers={"Authorization": f"Bearer {BOCHA_API_KEY}", "Content-Type": "application/json"},
+        json={"query": str(query), "summary": True, "count": max(1, min(top_k, 10))},
+        timeout=15,
+    )
+
 def _web_search(query: str, top_k: int = 5) -> str:
     """博查联网搜索：返回网页标题、链接、摘要，结果以数据标记包裹防御 prompt 注入"""
     if not BOCHA_API_KEY:
@@ -354,12 +367,7 @@ def _web_search(query: str, top_k: int = 5) -> str:
     if not query or not str(query).strip():
         return "搜索失败: 搜索内容不能为空"
     try:
-        resp = requests.post(
-            "https://api.bochaai.com/v1/web-search",
-            headers={"Authorization": f"Bearer {BOCHA_API_KEY}", "Content-Type": "application/json"},
-            json={"query": str(query), "summary": True, "count": max(1, min(top_k, 10))},
-            timeout=15,
-        )
+        resp = _bocha_request(query, top_k)
         data = resp.json()
         if resp.status_code != 200:
             return f"搜索失败({resp.status_code}): {data.get('message', '')}"
@@ -388,9 +396,20 @@ def _web_search(query: str, top_k: int = 5) -> str:
         return f"联网搜索出错: {e}"
 
 
+@resilient_call("dashscope")
+def _call_vision_api(model: str, messages: list) -> str:
+    """带重试+熔断的 DashScope 视觉 API 调用"""
+    from openai import OpenAI
+    client = OpenAI(
+        api_key=DASHSCOPE_API_KEY,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    response = client.chat.completions.create(model=model, messages=messages)
+    return response.choices[0].message.content
+
+
 def _call_vision_model(user_id: int, image_path: str, prompt: str) -> str:
     """调用 qwen-vl-plus 视觉模型，支持公网 URL 或 uploads 内本地文件"""
-    from openai import OpenAI
     import base64
 
     if image_path.startswith(("http://", "https://")):
@@ -408,21 +427,13 @@ def _call_vision_model(user_id: int, image_path: str, prompt: str) -> str:
             b64 = base64.b64encode(f.read()).decode("utf-8")
         image_payload = {"url": f"data:{mime};base64,{b64}"}
 
-    client = OpenAI(
-        api_key=DASHSCOPE_API_KEY,
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-    )
-    response = client.chat.completions.create(
-        model="qwen-vl-plus",
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": image_payload},
-                {"type": "text", "text": prompt},
-            ],
-        }],
-    )
-    return response.choices[0].message.content
+    return _call_vision_api("qwen-vl-plus", [{
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": image_payload},
+            {"type": "text", "text": prompt},
+        ],
+    }])
 
 
 def _analyze_image(user_id: int, image_path: str) -> str:
@@ -447,6 +458,39 @@ def _ocr_image(user_id: int, image_path: str) -> str:
         return f"OCR 识别失败: {e}"
 
 
+@resilient_call("dashscope")
+def _asr_submit_url(key: str, audio_url: str):
+    """带重试+熔断的 ASR 提交（URL 模式）"""
+    return requests.post(
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"model": "paraformer-v1", "input": {"file_urls": [audio_url]}},
+        timeout=30,
+    )
+
+
+@resilient_call("dashscope")
+def _asr_submit_file(key: str, file_obj):
+    """带重试+熔断的 ASR 提交（文件模式）"""
+    return requests.post(
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
+        headers={"Authorization": f"Bearer {key}"},
+        data={"model": "paraformer-v1"},
+        files={"file": file_obj},
+        timeout=60,
+    )
+
+
+@resilient_call("dashscope")
+def _asr_poll(key: str, task_id: str):
+    """带重试+熔断的 ASR 轮询"""
+    return requests.get(
+        f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}",
+        headers={"Authorization": f"Bearer {key}"},
+        timeout=10,
+    )
+
+
 def _speech_to_text(user_id: int, audio_input: str) -> str:
     """语音转文字（DashScope Paraformer），支持公网 URL 或 uploads 内本地文件"""
     key = DASHSCOPE_API_KEY
@@ -461,22 +505,11 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
             ok, reason = validate_public_url(audio_input)
             if not ok:
                 return f"URL 被安全策略拒绝（SSRF 防护）: {reason}"
-            submit_resp = requests.post(
-                "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": "paraformer-v1", "input": {"file_urls": [audio_input]}},
-                timeout=30,
-            )
+            submit_resp = _asr_submit_url(key, audio_input)
         else:
             full = _safe_path(user_id, audio_input)
             with open(full, "rb") as f:
-                submit_resp = requests.post(
-                    "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
-                    headers={"Authorization": f"Bearer {key}"},
-                    data={"model": "paraformer-v1"},
-                    files={"file": f},
-                    timeout=60,
-                )
+                submit_resp = _asr_submit_file(key, f)
 
         task_data = submit_resp.json()
         if not task_data.get("output"):
@@ -484,11 +517,7 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
 
         task_id = task_data["output"]["task_id"]
         for _ in range(30):
-            poll_resp = requests.get(
-                f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}",
-                headers={"Authorization": f"Bearer {key}"},
-                timeout=10,
-            )
+            poll_resp = _asr_poll(key, task_id)
             poll_data = poll_resp.json()
             status = poll_data.get("output", {}).get("task_status", "")
 

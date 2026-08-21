@@ -22,6 +22,7 @@ from datetime import datetime, timezone, timedelta
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import AMAP_API_KEY
+from app.core.resilience import resilient_call
 
 # stdio 传输，客户端通过 JSON 配置自动启动本进程
 mcp = FastMCP("taskbench-external")
@@ -39,6 +40,24 @@ def get_current_time() -> str:
     )
 
 
+@resilient_call("amap")
+def _amap_geo(key: str, city: str):
+    """带重试+熔断的高德地理编码"""
+    return requests.get(
+        "https://restapi.amap.com/v3/geocode/geo",
+        params={"key": key, "address": city}, timeout=10,
+    )
+
+
+@resilient_call("amap")
+def _amap_weather(key: str, adcode: str):
+    """带重试+熔断的高德天气查询"""
+    return requests.get(
+        "https://restapi.amap.com/v3/weather/weatherInfo",
+        params={"key": key, "city": adcode, "extensions": "all"}, timeout=10,
+    )
+
+
 @mcp.tool()
 def query_weather(city: str) -> str:
     """查询城市天气，参数 city（城市名，如'北京'或'杭州'），返回当天及未来几天天气"""
@@ -47,22 +66,14 @@ def query_weather(city: str) -> str:
         return "未配置高德 API Key，请在 .env 中设置 AMAP_API_KEY"
 
     try:
-        geo_resp = requests.get(
-            "https://restapi.amap.com/v3/geocode/geo",
-            params={"key": key, "address": city}, timeout=10,
-        )
-        geo_data = geo_resp.json()
+        geo_data = _amap_geo(key, city).json()
         if geo_data.get("status") != "1" or not geo_data.get("geocodes"):
             return f"未找到城市「{city}」，请检查城市名是否正确"
 
         adcode = geo_data["geocodes"][0]["adcode"]
         city_name = geo_data["geocodes"][0].get("formatted_address", city)
 
-        weather_resp = requests.get(
-            "https://restapi.amap.com/v3/weather/weatherInfo",
-            params={"key": key, "city": adcode, "extensions": "all"}, timeout=10,
-        )
-        weather_data = weather_resp.json()
+        weather_data = _amap_weather(key, adcode).json()
         if weather_data.get("status") != "1":
             return f"查询天气失败：{weather_data.get('info', '未知错误')}"
 

@@ -23,6 +23,7 @@ from langchain.agents.middleware import ToolRetryMiddleware
 from app.agents.tools import build_tools
 from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY
 from app.core.cost_guard import CostLimitExceeded
+from app.core.resilience import resilient_call
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,12 @@ def set_plan_confirm_handler(fn: Callable[[str, list[dict]], bool] | None):
     _plan_confirm_handler = fn
 
 
+@resilient_call("dashscope")
+def _llm_invoke(llm, prompt: str):
+    """带重试+熔断的 LLM 同步调用"""
+    return llm.invoke(prompt)
+
+
 class McpAgent:
     """
     Agent 核心类。
@@ -208,7 +215,7 @@ class McpAgent:
         """返回子任务计划；None 表示简单任务，无需规划"""
         llm = _create_llm()
         tools_desc = "、".join(tool_names) if tool_names else "（无）"
-        resp = llm.invoke(PLAN_PROMPT.format(tools=tools_desc, input=user_input))
+        resp = _llm_invoke(llm, PLAN_PROMPT.format(tools=tools_desc, input=user_input))
         text = (resp.content or "").strip()
         if text.upper().startswith("SIMPLE"):
             return None
@@ -244,7 +251,7 @@ class McpAgent:
     def _summarize_sync(self, user_input: str, results: list[str]) -> str:
         llm = _create_llm()
         results_text = "\n\n".join(results) if results else "（无结果）"
-        resp = llm.invoke(SUMMARIZE_PROMPT.format(input=user_input, results=results_text))
+        resp = _llm_invoke(llm, SUMMARIZE_PROMPT.format(input=user_input, results=results_text))
         return (resp.content or "").strip() or "（汇总失败）"
 
     async def _arun(
