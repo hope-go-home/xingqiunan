@@ -324,13 +324,20 @@ class McpAgent:
         on_event: Callable[[dict], None] | None,
         plan: list[dict],
     ) -> str:
-        """按计划逐个执行子任务（静默执行，避免半成品回答流出），最后统一汇总"""
+        """ReAct + Reflection 执行器：
+        1. 逐个执行子任务，每步检查结果（ReAct）
+        2. 失败自动重试一次（换角度）
+        3. 全部完成后自我审查一致性（Reflection）
+        4. 发现问题回溯重做
+        """
         _emit(on_event, {
             "type": "plan", "steps": [p["name"] for p in plan],
         })
 
         results: list[str] = []
         total = len(plan)
+        max_retry = 1  # 每步最多重试 1 次
+
         for i, step in enumerate(plan, 1):
             _emit(on_event, {
                 "type": "plan_step", "index": i, "total": total, "name": step["name"],
@@ -339,16 +346,95 @@ class McpAgent:
                 f"当前总目标：{user_input}\n\n"
                 f"请执行以下子任务并汇报结果（不要重复整个目标）：\n{step['action']}"
             )
-            try:
-                r = await self._arun_single(step_input, user_id, history, None, emit_answer=False)
-            except Exception as e:
-                r = f"子任务执行出错: {e}"
+
+            # ─── ReAct：执行 + 检查 + 重试 ───
+            r = None
+            for attempt in range(max_retry + 1):
+                try:
+                    r = await self._arun_single(step_input, user_id, history, None, emit_answer=False)
+                except Exception as e:
+                    r = f"子任务执行出错: {e}"
+
+                # 检查结果是否有效（非空、非错误、非"无法"类回答）
+                if self._is_valid_result(r):
+                    break
+                if attempt < max_retry:
+                    logger.info("[ReAct] 步骤%d 结果无效，重试 (attempt %d)", i, attempt + 1)
+                    step_input = (
+                        f"当前总目标：{user_input}\n\n"
+                        f"上一步执行结果不理想：{r[:200]}\n\n"
+                        f"请换一种方式重新执行：\n{step['action']}"
+                    )
+
             results.append(f"【第 {i} 步：{step['name']}】\n{r}")
+
+        # ─── Reflection：自我审查一致性 ───
+        reflection = await self._reflect_sync(user_input, results)
+        if reflection.get("issues"):
+            logger.info("[Reflection] 发现 %d 个问题，回溯重做", len(reflection["issues"]))
+            _emit(on_event, {"type": "reflection", "issues": reflection["issues"]})
+            for issue_idx in reflection["re_execute"]:
+                if 0 <= issue_idx < len(plan):
+                    step = plan[issue_idx]
+                    retry_input = (
+                        f"当前总目标：{user_input}\n\n"
+                        f"之前的执行存在问题：{reflection['issues'][0]}\n\n"
+                        f"请重新执行：\n{step['action']}"
+                    )
+                    try:
+                        r = await self._arun_single(retry_input, user_id, history, None, emit_answer=False)
+                    except Exception as e:
+                        r = f"重试出错: {e}"
+                    results[issue_idx] = f"【第 {issue_idx + 1} 步：{step['name']}（已重做）】\n{r}"
 
         # 汇总：把计划 + 各步结果交给 LLM 组织最终回答，流式推送
         summary = await asyncio.to_thread(self._summarize_sync, user_input, results)
         _stream_answer(on_event, summary)
         return summary
+
+    @staticmethod
+    def _is_valid_result(result: str) -> bool:
+        """判断子任务结果是否有效（非空、非错误、非无法完成类回答）"""
+        if not result or len(result.strip()) < 5:
+            return False
+        low = result.lower()
+        invalid_markers = ["无法", "失败", "出错", "error", "抱歉", "不能", "做不到"]
+        # 如果结果同时包含"失败"类关键词且很短，视为无效
+        if any(m in low for m in invalid_markers) and len(result.strip()) < 50:
+            return False
+        return True
+
+    def _reflect_sync(self, user_input: str, results: list[str]) -> dict:
+        """Reflection：LLM 审查各步结果的一致性和完整性，返回问题列表和需重做的步骤索引"""
+        if len(results) < 2:
+            return {"issues": [], "re_execute": []}
+        try:
+            llm = _create_llm()
+            review_prompt = (
+                f"你是质量审查员。用户需求：{user_input}\n\n"
+                f"以下是各子任务的执行结果：\n"
+                + "\n\n".join(results)
+                + "\n\n请检查：\n"
+                "1. 各步结果之间是否有矛盾或数据不一致？\n"
+                "2. 是否有步骤的结果明显不完整或答非所问？\n"
+                "3. 是否遗漏了用户需求的某个部分？\n\n"
+                "输出格式（JSON，不要解释）：\n"
+                '{"issues": ["问题1", "问题2"], "re_execute": [需要重做的步骤索引(从0开始)]}\n'
+                "如果没问题，输出：{\"issues\": [], \"re_execute\": []}"
+            )
+            resp = _llm_invoke_with_failover(review_prompt)
+            text = (resp.content or "").strip()
+            # 容错解析
+            if text.startswith("```"):
+                text = text.strip("`")
+                if text.startswith("json"):
+                    text = text[4:].strip()
+            import json
+            data = json.loads(text)
+            return {"issues": data.get("issues", []), "re_execute": data.get("re_execute", [])}
+        except Exception as e:
+            logger.warning("Reflection 审查失败，跳过: %s", e)
+            return {"issues": [], "re_execute": []}
 
     async def _arun_single(
         self,
