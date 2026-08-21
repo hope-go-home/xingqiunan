@@ -14,6 +14,7 @@ from app.core.config import ALLOWED_ORIGINS, LOG_DIR
 from app.core.database import init_db
 from app.models.chat_message import ChatMessage  # 确保 chat_history 表创建
 from app.models.token_usage import TokenUsage  # 确保 token_usage 表创建
+from app.models.user_preference import UserPreference  # 确保 user_preferences 表创建
 from app.api.auth import router as auth_router
 from app.api.files import router as files_router
 from app.api.tasks import router as tasks_router

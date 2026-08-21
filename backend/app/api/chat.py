@@ -444,6 +444,32 @@ async def websocket_chat(websocket: WebSocket):
             use_agent = msg.get("use_agent", False)
             web_search = bool(msg.get("web_search", False))
             use_planning = bool(msg.get("use_planning", False))
+
+            # 用户偏好命令（记住/查看/删除/清空）
+            from app.core.preference_manager import (
+                parse_preference_command, set_preference, delete_preference,
+                clear_preferences, load_preferences, format_preferences,
+            )
+            pref_cmd = parse_preference_command(user_input)
+            if pref_cmd:
+                action, params = pref_cmd
+                if action == "set":
+                    result = await set_preference(int(user_id), params["key"], params["value"])
+                elif action == "delete":
+                    result = await delete_preference(int(user_id), params["key"])
+                elif action == "clear":
+                    result = await clear_preferences(int(user_id))
+                elif action == "list":
+                    prefs = await load_preferences(int(user_id))
+                    if prefs:
+                        result = "当前偏好：" + "，".join(f"{k}={v}" for k, v in sorted(prefs.items()))
+                    else:
+                        result = "暂无偏好设置。用「记住：key=value」添加。"
+                else:
+                    result = "未知操作"
+                await manager.send_json(user_id, {"type": "answer", "content": result})
+                await manager.send_stream(user_id, "", done=True)
+                continue
             logger.info("[WS] 收到消息 user=%s 会话=%s agent=%s 联网=%s 规划=%s 内容=%s",
                         user_id, session_id, use_agent, web_search, use_planning, user_input[:120])
             session_id = msg.get("session_id") or current_session or uuid.uuid4().hex[:16]
@@ -452,6 +478,12 @@ async def websocket_chat(websocket: WebSocket):
             if session_id != current_session:
                 current_session = session_id
                 ctx = await _db_context(user_id, session_id)
+
+            # 加载用户偏好，注入到上下文首部
+            prefs = await load_preferences(int(user_id))
+            pref_text = format_preferences(prefs)
+            if pref_text and (not ctx or ctx[0].get("content", "") != pref_text):
+                ctx.insert(0, {"role": "system", "content": pref_text})
 
             # 保存用户消息
             async with async_session() as db:
