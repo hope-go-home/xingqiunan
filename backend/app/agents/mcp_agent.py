@@ -21,7 +21,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ToolRetryMiddleware
 
 from app.agents.tools import build_tools
-from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY
+from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, LLM_FALLBACK_MODEL, LLM_FALLBACK_API_KEY
 from app.core.cost_guard import CostLimitExceeded
 from app.core.resilience import resilient_call
 
@@ -149,10 +149,22 @@ def _stream_answer(on_event, text: str, emit: bool = True):
 
 
 def _create_llm() -> ChatOpenAI:
-    """创建 LLM 实例（独立函数便于测试替换）"""
+    """创建主 LLM 实例"""
     return ChatOpenAI(
         model=LLM_MODEL,
         api_key=DASHSCOPE_API_KEY,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        temperature=0.1,
+    )
+
+
+def _create_llm_fallback() -> ChatOpenAI | None:
+    """创建备用 LLM 实例（无配置时返回 None）"""
+    if not LLM_FALLBACK_API_KEY:
+        return None
+    return ChatOpenAI(
+        model=LLM_FALLBACK_MODEL,
+        api_key=LLM_FALLBACK_API_KEY,
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
         temperature=0.1,
     )
@@ -172,6 +184,18 @@ def set_plan_confirm_handler(fn: Callable[[str, list[dict]], bool] | None):
 def _llm_invoke(llm, prompt: str):
     """带重试+熔断的 LLM 同步调用"""
     return llm.invoke(prompt)
+
+
+def _llm_invoke_with_failover(prompt: str):
+    """主模型调用，失败自动切备用模型"""
+    try:
+        return _llm_invoke(_create_llm(), prompt)
+    except Exception as e:
+        logger.warning("主模型调用失败 (%s)，尝试备用模型", e)
+        fallback = _create_llm_fallback()
+        if fallback is None:
+            raise
+        return _llm_invoke(fallback, prompt)
 
 
 class McpAgent:
@@ -215,7 +239,7 @@ class McpAgent:
         """返回子任务计划；None 表示简单任务，无需规划"""
         llm = _create_llm()
         tools_desc = "、".join(tool_names) if tool_names else "（无）"
-        resp = _llm_invoke(llm, PLAN_PROMPT.format(tools=tools_desc, input=user_input))
+        resp = _llm_invoke_with_failover(PLAN_PROMPT.format(tools=tools_desc, input=user_input))
         text = (resp.content or "").strip()
         if text.upper().startswith("SIMPLE"):
             return None
@@ -251,7 +275,7 @@ class McpAgent:
     def _summarize_sync(self, user_input: str, results: list[str]) -> str:
         llm = _create_llm()
         results_text = "\n\n".join(results) if results else "（无结果）"
-        resp = _llm_invoke(llm, SUMMARIZE_PROMPT.format(input=user_input, results=results_text))
+        resp = _llm_invoke_with_failover(SUMMARIZE_PROMPT.format(input=user_input, results=results_text))
         return (resp.content or "").strip() or "（汇总失败）"
 
     async def _arun(
