@@ -36,6 +36,9 @@ aiofiles
 # 可靠性（重试/熔断/限流）
 tenacity>=8.2.0
 
+# 数据库迁移
+alembic>=1.13.0
+
 # ===== 开发/测试 =====
 pytest
 pytest-asyncio
