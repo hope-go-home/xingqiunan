@@ -260,7 +260,6 @@ class McpAgent:
 
     def _make_plan_sync(self, user_input: str, tool_names: list[str]) -> list[dict] | None:
         """返回子任务计划；None 表示简单任务，无需规划"""
-        llm = _create_llm()
         tools_desc = "、".join(tool_names) if tool_names else "（无）"
         resp = _llm_invoke_with_failover(PLAN_PROMPT.format(tools=tools_desc, input=user_input))
         text = (resp.content or "").strip()
@@ -296,7 +295,6 @@ class McpAgent:
     # ─── 汇总器：把子任务结果组织成最终回答 ───
 
     def _summarize_sync(self, user_input: str, results: list[str]) -> str:
-        llm = _create_llm()
         results_text = "\n\n".join(results) if results else "（无结果）"
         resp = _llm_invoke_with_failover(SUMMARIZE_PROMPT.format(input=user_input, results=results_text))
         return (resp.content or "").strip() or "（汇总失败）"
@@ -432,7 +430,6 @@ class McpAgent:
         if len(results) < 2:
             return {"issues": [], "re_execute": []}
         try:
-            llm = _create_llm()
             review_prompt = (
                 f"你是质量审查员。用户需求：{user_input}\n\n"
                 f"以下是各子任务的执行结果：\n"
