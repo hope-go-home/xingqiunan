@@ -1,10 +1,10 @@
-<!-- DashboardView.vue — 总览。Agent 12 项工具清单 + 快捷入口。 -->
+<!-- DashboardView.vue — 总览。Agent 23 项工具清单 + 快捷入口。 -->
 <script setup>
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-/** 12 项 Agent 工具 */
+/** 23 项 Agent 工具（21 本地注册 + 2 MCP 协议） */
 const tools = [
   {
     group: '文档',
@@ -21,9 +21,15 @@ const tools = [
     ],
   },
   {
+    group: '联网搜索',
+    items: [
+      { name: 'web_search',            label: '联网搜索',   desc: '传入搜索关键词或自然语言问题，调用博查 API 搜索最新网络信息，返回标题、链接和摘要' },
+    ],
+  },
+  {
     group: '外部服务',
     items: [
-      { name: 'query_weather',         label: '天气查询',   desc: '传入城市名称（如"北京"），通过高德 API 地理编码后查询实时天气和未来几天预报' },
+      { name: 'query_weather',         label: '天气查询',   desc: 'MCP 协议接入：传入城市名称（如"北京"），通过高德 API 地理编码后查询实时天气和未来几天预报' },
       { name: 'translate',             label: '多语言翻译', desc: '传入文本和目标语言，调用 LLM 翻译，支持中、英、日、韩等各种语言' },
     ],
   },
@@ -43,9 +49,29 @@ const tools = [
     ],
   },
   {
+    group: '工作区文件',
+    items: [
+      { name: 'write_file',            label: '写入文件',   desc: '在工作区沙箱内写入/覆盖文件（支持自动创建目录），如 scripts/demo.py' },
+      { name: 'read_file',             label: '读取文件',   desc: '读取工作区内文本文件内容，仅限自己的沙箱目录' },
+      { name: 'list_workspace',        label: '列出目录',   desc: '列出工作区目录内容，含文件大小与修改时间' },
+      { name: 'create_directory',      label: '创建目录',   desc: '在工作区内创建目录，支持多级路径' },
+      { name: 'delete_file',           label: '删除文件',   desc: '删除工作区内文件或空目录，高危操作需人工确认' },
+      { name: 'move_file',             label: '移动/重命名', desc: '移动或重命名工作区内文件，高危操作需人工确认' },
+      { name: 'run_command',           label: '执行命令',   desc: '在授权工作区内执行白名单命令（python/pip/git/node/npm 等），需人工确认' },
+    ],
+  },
+  {
+    group: '技能系统',
+    items: [
+      { name: 'install_skill',         label: '安装技能',   desc: '从官方技能仓库（anthropics/skills）下载安装技能到本地 skills/ 目录，如 pptx/docx/pdf/xlsx' },
+      { name: 'list_skills',           label: '列出技能',   desc: '列出已安装的所有技能及其说明' },
+      { name: 'load_skill',            label: '加载技能',   desc: '读取技能的 SKILL.md 使用说明并按步骤执行任务（如生成 PPT）' },
+    ],
+  },
+  {
     group: '系统',
     items: [
-      { name: 'get_current_time',      label: '获取时间',   desc: '无需参数，返回当前北京时间（年月日、星期、时分秒），用于回答时间相关问题时准确推算日期' },
+      { name: 'get_current_time',      label: '获取时间',   desc: 'MCP 协议接入：无需参数，返回当前北京时间（年月日、星期、时分秒），用于回答时间相关问题时准确推算日期' },
     ],
   },
 ]
@@ -63,17 +89,17 @@ const tools = [
       <button class="quick-card" @click="router.push('/chat')">
         <span class="qc-icon">◈</span>
         <span class="qc-label">AI 对话</span>
-        <span class="qc-desc">Agent 模式 · 12 项工具</span>
+        <span class="qc-desc">Agent 模式 · 23 项工具</span>
       </button>
       <button class="quick-card" @click="router.push('/knowledge')">
         <span class="qc-icon">▣</span>
         <span class="qc-label">知识库</span>
-        <span class="qc-desc">语义搜索 · 向量存储</span>
+        <span class="qc-desc">文件上传 · 语义搜索</span>
       </button>
       <button class="quick-card" @click="router.push('/chat')">
-        <span class="qc-icon">↗</span>
-        <span class="qc-label">文件上传</span>
-        <span class="qc-desc">对话页 + 按钮上传</span>
+        <span class="qc-icon">⌘</span>
+        <span class="qc-label">Agent 工作区</span>
+        <span class="qc-desc">沙箱文件操作 · 命令执行</span>
       </button>
     </div>
 
