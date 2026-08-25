@@ -3,7 +3,7 @@
 import { ref, onMounted } from 'vue'
 import api from '../api/index'
 
-// 添加文档
+// 添加文档（粘贴文本）
 const addText = ref('')
 const adding = ref(false)
 const addMsg = ref('')
@@ -19,6 +19,34 @@ async function handleAdd() {
   } catch (e) {
     addMsg.value = e?.response?.data?.detail || '添加失败'
   } finally { adding.value = false }
+}
+
+// 上传本地文件到知识库
+const uploadFile = ref(null)
+const uploading = ref(false)
+const uploadMsg = ref('')
+
+function onFileChange(e) {
+  uploadFile.value = e.target.files[0] || null
+  uploadMsg.value = ''
+}
+
+async function handleUpload() {
+  if (!uploadFile.value) return
+  uploading.value = true; uploadMsg.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('file', uploadFile.value)
+    const { data } = await api.post('/knowledge/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    uploadMsg.value = '已上传：' + data.filename + '（' + data.doc_ids.length + ' 个分块）'
+    uploadFile.value = null
+    document.getElementById('kb-file-input').value = ''
+    fetchList()
+  } catch (e) {
+    uploadMsg.value = e?.response?.data?.detail || '上传失败'
+  } finally { uploading.value = false }
 }
 
 // 搜索
@@ -80,6 +108,16 @@ onMounted(fetchList)
             {{ adding ? '添加中…' : '添加到知识库' }}
           </button>
           <p v-if="addMsg" class="kb-msg" :class="{ 'msg-ok': addMsg.includes('已添加') }">{{ addMsg }}</p>
+
+          <div class="upload-divider"><span>或上传本地文件</span></div>
+          <div class="form-group">
+            <input id="kb-file-input" type="file" class="form-file" @change="onFileChange"
+                   accept=".txt,.md,.pdf,.docx,.json,.csv,.xml,.html,.py,.yaml,.yml,.ini,.cfg,.log" />
+          </div>
+          <button class="btn btn-secondary" style="width:100%" :disabled="uploading || !uploadFile" @click="handleUpload">
+            {{ uploading ? '上传中…' : '上传文件到知识库' }}
+          </button>
+          <p v-if="uploadMsg" class="kb-msg" :class="{ 'msg-ok': uploadMsg.includes('已上传') }">{{ uploadMsg }}</p>
         </div>
 
         <!-- 语义搜索 -->
@@ -142,6 +180,10 @@ onMounted(fetchList)
 
 .kb-msg { margin-top: 10px; font-size: 12px; color: var(--slate); }
 .msg-ok { color: var(--verdant); }
+
+.upload-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; color: var(--muted); font-size: 11px; }
+.upload-divider::before, .upload-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.form-file { width: 100%; font-size: 12px; color: var(--slate); }
 
 .search-results { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
 .search-item { padding: 10px 12px; background: var(--steel); border-radius: var(--radius-sm); }

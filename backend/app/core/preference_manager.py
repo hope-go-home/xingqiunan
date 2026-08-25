@@ -1,8 +1,10 @@
 # 用户偏好管理器：跨会话长期记忆的 CRUD
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from app.core.database import async_session
 from app.models.user_preference import UserPreference
+
+MAX_PREFERENCES = 20  # 每个用户最多 20 条偏好
 
 
 async def load_preferences(user_id: int) -> dict[str, str]:
@@ -33,6 +35,14 @@ async def set_preference(user_id: int, key: str, value: str) -> str:
         if existing:
             existing.value = value
         else:
+            # 检查条数上限
+            count_result = await db.execute(
+                select(func.count()).select_from(UserPreference)
+                .where(UserPreference.user_id == user_id)
+            )
+            count = count_result.scalar()
+            if count >= MAX_PREFERENCES:
+                return f"偏好数量已达上限（{MAX_PREFERENCES}条），请先删除再添加"
             db.add(UserPreference(user_id=user_id, key=key, value=value))
         await db.commit()
     return f"已设置：{key} = {value}"

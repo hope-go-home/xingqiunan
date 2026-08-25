@@ -397,6 +397,13 @@ input, textarea, select { font-family: inherit; }
 }
 .btn-ghost:hover:not(:disabled) { background: var(--steel); color: var(--ink); }
 
+.btn-secondary {
+  background: var(--steel);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--border); }
+
 /* ========== 状态标签 ========== */
 .status-badge {
   display: inline-flex;

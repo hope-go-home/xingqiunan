@@ -1,12 +1,17 @@
 # 知识库业务逻辑：使用 Chroma 存储文档向量，支持语义检索
 # 文本分块：长文档自动切分，每块约 500 字，块间重叠 50 字
 
+import io
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import CHROMA_PERSIST_DIR
 
 CHUNK_SIZE = 500        # 每块字符数
 CHUNK_OVERLAP = 50      # 块间重叠字符数
+
+# 可直接按文本读取的格式
+TEXT_EXTS = {".txt", ".md", ".py", ".json", ".yaml", ".yml", ".toml", ".cfg",
+             ".ini", ".csv", ".log", ".env", ".xml", ".html"}
 
 
 def _chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
@@ -20,6 +25,41 @@ def _chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP)
         chunks.append(text[start:end])
         start = end - overlap
     return chunks
+
+
+def extract_text(filename: str, content: bytes) -> str:
+    """从上传文件的字节内容中提取纯文本（支持 txt/md/pdf/docx/json/csv 等）"""
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+
+    # 文本类格式：直接解码
+    if ext in TEXT_EXTS:
+        return content.decode("utf-8", errors="ignore")
+
+    # PDF：PyMuPDF 从内存解析
+    if ext == ".pdf":
+        import fitz  # PyMuPDF
+        doc = fitz.open(stream=content, filetype="pdf")
+        try:
+            text_parts = [page.get_text() for page in doc]
+        finally:
+            doc.close()
+        result = "\n".join(text_parts)
+        if not result.strip():
+            raise ValueError("PDF 中未提取到文字（可能是扫描件或图片型 PDF）")
+        return result
+
+    # Word：python-docx 从内存解析
+    if ext in (".docx", ".doc"):
+        if ext == ".doc":
+            raise ValueError("旧版 .doc 格式不支持，请转换为 .docx")
+        from docx import Document
+        doc = Document(io.BytesIO(content))
+        text_parts = [p.text for p in doc.paragraphs if p.text.strip()]
+        if not text_parts:
+            raise ValueError("Word 文档为空")
+        return "\n".join(text_parts)
+
+    raise ValueError(f"不支持的文件类型: {ext or '未知'}（支持 txt/md/pdf/docx/json/csv/html 等）")
 
 
 class KnowledgeService:
