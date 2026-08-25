@@ -65,27 +65,35 @@ def extract_text(filename: str, content: bytes) -> str:
 class KnowledgeService:
     """知识库服务，基于 Chroma 实现文档向量化存储和检索。"""
 
+    # 集合缓存：user_id -> collection（避免每次请求都 get_or_create）
+    _collections: dict[int, object] = {}
+
     def __init__(self, db: AsyncSession, user_id: int):
         self.db = db
         self.user_id = user_id
-        self._collection = None
+
+    @classmethod
+    def _get_collection(cls, user_id: int):
+        if user_id not in cls._collections:
+            import chromadb
+            client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+            cls._collections[user_id] = client.get_or_create_collection(
+                name=f"user_{user_id}",
+                metadata={"hnsw:space": "cosine"},
+            )
+        return cls._collections[user_id]
 
     @property
     def collection(self):
-        """延迟加载 Chroma 集合"""
-        if self._collection is None:
-            import chromadb
-            client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
-            self._collection = client.get_or_create_collection(
-                name=f"user_{self.user_id}",
-                metadata={"hnsw:space": "cosine"},
-            )
-        return self._collection
+        return self._get_collection(self.user_id)
 
     async def add_document(self, text: str, metadata: dict | None = None) -> list[str]:
-        """将文本分块后添加到知识库，返回块 ID 列表"""
+        """将文本分块后添加到知识库，所有块共享同一个 group 标识（便于整篇删除）"""
         chunks = _chunk_text(text)
-        base_meta = metadata or {"user_id": self.user_id}
+        group = uuid.uuid4().hex[:12]
+        base_meta = {"user_id": self.user_id, "group": group}
+        if metadata:
+            base_meta.update(metadata)
         doc_ids = []
         metadatas = []
         documents = []
@@ -112,17 +120,25 @@ class KnowledgeService:
         return docs
 
     async def list_documents(self) -> list[dict]:
-        """列出知识库中的文档（限制前 50 条，避免全量加载内存）"""
-        results = self.collection.get(limit=50)
-        docs = []
-        for i, doc_id in enumerate(results["ids"]):
-            content = results["documents"][i] if results["documents"] else ""
-            docs.append({
-                "id": doc_id,
-                "content": content[:100] + "..." if len(content) > 100 else content,
-            })
-        return docs
+        """按文档分组列出知识库（一个文档 = 多个分块，聚合为一条）"""
+        results = self.collection.get()
+        groups: dict[str, dict] = {}
+        ids = results.get("ids") or []
+        metadatas = results.get("metadatas") or []
+        documents = results.get("documents") or []
+        for i, cid in enumerate(ids):
+            meta = metadatas[i] if i < len(metadatas) and metadatas[i] else {}
+            content = documents[i] if i < len(documents) and documents[i] else ""
+            gid = meta.get("group") or cid  # 旧数据无 group 标识 → 每块独立成组
+            if gid not in groups:
+                title = meta.get("filename") or content[:60] or "（无标题）"
+                groups[gid] = {"id": gid, "title": title, "chunks": 0, "preview": content[:100]}
+            groups[gid]["chunks"] += 1
+        return list(groups.values())
 
     async def delete_document(self, doc_id: str):
-        """根据文档 ID 删除"""
-        self.collection.delete(ids=[doc_id])
+        """按文档删除：优先按 group 删除全部分块；旧数据无 group 时按块 ID 兜底"""
+        before = self.collection.count()
+        self.collection.delete(where={"group": doc_id})
+        if self.collection.count() == before:
+            self.collection.delete(ids=[doc_id])

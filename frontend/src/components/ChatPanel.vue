@@ -267,7 +267,7 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 
     <!-- 侧边栏折叠按钮 -->
     <button class="sidebar-toggle" :title="sidebarCollapsed ? '展开会话列表' : '收起会话列表'" @click="sidebarCollapsed = !sidebarCollapsed">
-      <span v-if="!sidebarCollapsed">«</span><span v-else>»</span>
+      {{ sidebarCollapsed ? '»' : '«' }}
     </button>
 
     <!-- 右侧聊天区 -->
@@ -439,19 +439,14 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .mode-toggle { display: flex; background: var(--steel); border-radius: var(--radius-sm); overflow: hidden; }
 .mode-btn { padding: 5px 12px; font-size: 11px; font-weight: 600; background: transparent; color: var(--slate); transition: all 0.15s; }
 .mode-btn.active { background: var(--cobalt); color: #fff; }
-.web-search-btn {
-  padding: 5px 12px; font-size: 11px; font-weight: 600; border-radius: var(--radius-sm);
-  background: var(--steel); color: var(--slate); border: 1px solid var(--border);
-  transition: all 0.15s; cursor: pointer;
-}
-.web-search-btn:hover { background: var(--border); color: var(--ink); }
-.web-search-btn.active { background: var(--verdant); border-color: var(--verdant); color: #fff; }
+.web-search-btn,
 .plan-btn {
   padding: 5px 12px; font-size: 11px; font-weight: 600; border-radius: var(--radius-sm);
   background: var(--steel); color: var(--slate); border: 1px solid var(--border);
   transition: all 0.15s; cursor: pointer;
 }
-.plan-btn:hover { background: var(--border); color: var(--ink); }
+.web-search-btn:hover, .plan-btn:hover { background: var(--border); color: var(--ink); }
+.web-search-btn.active { background: var(--verdant); border-color: var(--verdant); color: #fff; }
 .plan-btn.active { background: var(--amber); border-color: var(--amber); color: #fff; }
 .agent-indicator { font-size: 11px; color: var(--amber); display: flex; align-items: center; gap: 5px; }
 .conn-status { font-size: 11px; display: flex; align-items: center; gap: 5px; margin-left: auto; }
@@ -481,7 +476,7 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
   font-size: 13px; color: var(--ink); line-height: 1.6;
   background: var(--steel); border-radius: var(--radius-sm);
   padding: 10px 12px; margin-bottom: 16px; white-space: pre-wrap;
-  word-break: break-all; font-family: ui-monospace, Consolas, monospace;
+  word-break: break-all; font-family: var(--font-mono);
 }
 .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .confirm-btn { padding: 8px 18px; }
@@ -518,13 +513,6 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
   background: var(--verdant-bg, #e3f4ec); color: var(--verdant);
   border-radius: 999px; font-size: 10px; font-weight: 600;
 }
-.msg-tool { justify-content: flex-start; }
-.msg-tool .msg-bubble {
-  background: var(--cobalt-bg); color: var(--cobalt);
-  font-size: 12px; font-family: ui-monospace, Consolas, monospace;
-  padding: 6px 12px; border-radius: var(--radius-sm);
-  border: 1px dashed var(--cobalt); max-width: 92%;
-}
 .loading-bubble { padding: 14px 24px; }
 .loading-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin: 0 2px; animation: dot-bounce 1.2s ease-in-out infinite; }
 .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
@@ -557,14 +545,14 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
   transition: background 0.1s;
 }
 .skill-dd-item:hover { background: var(--cobalt-bg); border-left-color: var(--cobalt); }
-.skill-name { font-size: 12px; font-weight: 700; color: var(--ink); font-family: ui-monospace, Consolas, monospace; }
+.skill-name { font-size: 12px; font-weight: 700; color: var(--ink); font-family: var(--font-mono); }
 .skill-desc { font-size: 11px; color: var(--slate); margin-top: 2px; line-height: 1.5; }
 
 /* Agent 工具调用日志 */
 .tool-log {
   max-height: 140px; overflow-y: auto; margin-top: 10px; padding: 10px 12px;
   background: var(--cobalt-bg); border: 1px dashed var(--cobalt); border-radius: var(--radius-sm);
-  font-size: 12px; font-family: ui-monospace, Consolas, monospace; flex-shrink: 0;
+  font-size: 12px; font-family: var(--font-mono); flex-shrink: 0;
 }
 .tool-log-head { font-weight: 700; color: var(--cobalt); margin-bottom: 6px; }
 .tool-log-count { font-weight: 400; color: var(--slate); margin-left: 4px; }

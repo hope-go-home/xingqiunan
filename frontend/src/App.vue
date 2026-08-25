@@ -15,6 +15,13 @@ const user = useUserStore()
 const isLoginPage = computed(() => route.name === 'login')
 const showUserMenu = ref(false)
 
+// 侧栏收缩状态（记忆到 localStorage）
+const collapsed = ref(localStorage.getItem('sb-collapsed') === '1')
+function toggleCollapse() {
+  collapsed.value = !collapsed.value
+  localStorage.setItem('sb-collapsed', collapsed.value ? '1' : '0')
+}
+
 function closeMenu(e) { if (!e.target.closest('.user-actions')) showUserMenu.value = false }
 onMounted(() => document.addEventListener('click', closeMenu))
 onUnmounted(() => document.removeEventListener('click', closeMenu))
@@ -43,8 +50,8 @@ function logout() {
 
   <!-- 已登录：侧边栏 + 内容 -->
   <div v-else class="shell">
-    <aside class="sidebar">
-      <div class="sidebar-brand" @click="go('/dashboard')">
+    <aside :class="['sidebar', { collapsed }]">
+      <div class="sidebar-brand" @click="go('/dashboard')" title="TaskBench">
         <span class="brand-icon">◆</span>
         <span class="brand-text">TaskBench</span>
       </div>
@@ -54,6 +61,7 @@ function logout() {
           v-for="item in navItems"
           :key="item.name"
           :class="['nav-btn', { active: route.name === item.name }]"
+          :title="collapsed ? item.label : undefined"
           @click="go(item.path)"
         >
           <span class="nav-icon">{{ item.icon }}</span>
@@ -73,6 +81,10 @@ function logout() {
           </div>
         </div>
       </div>
+
+      <button class="collapse-btn" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="toggleCollapse">
+        {{ collapsed ? '»' : '«' }}
+      </button>
     </aside>
 
     <main class="main">
@@ -87,22 +99,27 @@ function logout() {
 
 <style>
 /* ============================================
-   Design Tokens — "Precision Instrument" (Light)
-   灵感：精密仪器 / 实验室设备 —— 干净、克制、高可读性
+   Design Tokens — "Ink & Vellum" (制图纸)
+   灵感：工程制图台 —— 内容区是铺在板上的坐标纸，
+   卡片是钉住的图纸，mono 注记 + 朱红标记点缀。
    ============================================ */
 :root {
-  --paper:    #F8F9FB;   /* 页面背景 */
+  --paper:    #F4F5F2;   /* 页面背景：冷调绘图纸 */
   --white:    #FFFFFF;   /* 卡片 / 表面 */
-  --steel:    #F0F1F5;   /* 输入框背景 */
-  --border:   #E2E4EC;   /* 分割线 */
+  --steel:    #EFF0EB;   /* 输入框背景 */
+  --border:   #DEE1DA;   /* 分割线 */
 
-  --ink:      #1A1A2E;   /* 主文字 */
-  --slate:    #6B6B80;   /* 次文字 */
-  --muted:    #A8A8BC;   /* 占位符 */
+  --ink:      #172038;   /* 主文字：深墨蓝 */
+  --slate:    #5D6373;   /* 次文字 */
+  --muted:    #A2A7B0;   /* 占位符 */
 
-  --cobalt:      #4F6EF7;   /* 主 CTA / 选中 */
-  --cobalt-dim:  #3B54D4;   /* hover 加深 */
-  --cobalt-bg:   #EEF1FE;   /* 选中背景（浅） */
+  --cobalt:      #3D5BF5;   /* 主 CTA / 选中 */
+  --cobalt-dim:  #2C46DB;   /* hover 加深 */
+  --cobalt-bg:   #EDF1FE;   /* 选中背景（浅） */
+
+  --vermilion:   #D9532B;   /* 注记红：仅用于小型标注记号 */
+
+  --grid-line: rgba(23,32,56,0.045);  /* 坐标纸网格线 */
 
   --amber:      #E8950A;   /* 运行中 / 警告 */
   --amber-dim:  #C47B08;
@@ -161,7 +178,10 @@ input, textarea, select { font-family: inherit; }
   flex-direction: column;
   border-right: 1px solid var(--border);
   user-select: none;
+  position: relative;
+  transition: width 0.2s ease, min-width 0.2s ease;
 }
+.sidebar.collapsed { width: 64px; min-width: 64px; }
 
 .sidebar-brand {
   display: flex;
@@ -170,12 +190,16 @@ input, textarea, select { font-family: inherit; }
   padding: 20px 18px;
   cursor: pointer;
   transition: opacity 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .sidebar-brand:hover { opacity: 0.7; }
 
 .brand-icon {
   font-size: 20px;
   color: var(--cobalt);
+  flex-shrink: 0;
+  margin-left: -2px;
 }
 .brand-text {
   font-size: 16px;
@@ -190,7 +214,7 @@ input, textarea, select { font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 10px;
+  padding: 0 12px;
 }
 
 .nav-btn {
@@ -206,6 +230,8 @@ input, textarea, select { font-family: inherit; }
   transition: background 0.15s, color 0.15s;
   width: 100%;
   text-align: left;
+  position: relative;
+  white-space: nowrap;
 }
 .nav-btn:hover {
   background: var(--steel);
@@ -216,6 +242,16 @@ input, textarea, select { font-family: inherit; }
   color: var(--cobalt);
   font-weight: 600;
 }
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--cobalt);
+}
 
 .nav-icon {
   font-size: 16px;
@@ -223,6 +259,38 @@ input, textarea, select { font-family: inherit; }
   text-align: center;
   flex-shrink: 0;
 }
+
+/* 收缩态：隐藏文字，图标居中 */
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .user-name,
+.sidebar.collapsed .user-actions { display: none; }
+.sidebar.collapsed .sidebar-brand { justify-content: center; padding: 20px 8px; }
+.sidebar.collapsed .brand-icon { margin-left: 0; }
+.sidebar.collapsed .nav-btn { justify-content: center; padding: 10px 8px; }
+.sidebar.collapsed .sidebar-footer { justify-content: center; padding: 14px 8px; }
+
+/* 收缩开关 */
+.collapse-btn {
+  position: absolute;
+  right: -11px;
+  bottom: 64px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--white);
+  border: 1px solid var(--border);
+  color: var(--slate);
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(19,26,48,0.12);
+  z-index: 5;
+  transition: color 0.15s, border-color 0.15s;
+}
+.collapse-btn:hover { color: var(--cobalt); border-color: var(--cobalt); }
 
 /* 底部用户区 */
 .sidebar-footer {
@@ -245,6 +313,7 @@ input, textarea, select { font-family: inherit; }
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .user-name {
@@ -265,7 +334,7 @@ input, textarea, select { font-family: inherit; }
 .user-dropdown {
   position: absolute; bottom: 100%; right: 0; margin-bottom: 6px;
   background: var(--white); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(19,26,48,0.18);
   overflow: hidden; z-index: 20; min-width: 120px;
 }
 .user-dropdown button {
@@ -275,51 +344,53 @@ input, textarea, select { font-family: inherit; }
 .user-dropdown button:hover { background: var(--steel); }
 .user-dropdown button:last-child { color: var(--crimson); }
 
-.user-badge { cursor: pointer; }
-.logout-btn {
-  background: none;
-  color: var(--muted);
-  font-size: 16px;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s;
-}
-.logout-btn:hover { color: var(--crimson); }
-
-/* ========== 主内容区 ========== */
+/* ========== 主内容区：铺在制图板上的坐标纸 ========== */
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   padding: 32px 40px;
-  background: var(--paper);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 28px 28px;
   min-height: 0;   /* flex child 高度约束 */
 }
 
-/* ========== 页面通用标题 ========== */
+/* ========== 页面通用标题：图注式 ========== */
 .page-header {
   margin-bottom: 28px;
 }
 .page-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--ink);
 }
 .page-subtitle {
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--slate);
   font-size: 13px;
 }
+.page-subtitle::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  background: var(--vermilion);
+  margin-right: 8px;
+  vertical-align: middle;
+}
 
-/* ========== 卡片通用样式 ========== */
+/* ========== 卡片：钉在板上的图纸 ========== */
 .card {
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 2px rgba(19,26,48,0.05), 0 10px 28px -18px rgba(19,26,48,0.14);
 }
 
 /* ========== 表单通用样式 ========== */
@@ -440,4 +511,19 @@ input, textarea, select { font-family: inherit; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ========== 可访问性 ========== */
+:focus-visible {
+  outline: 2px solid var(--cobalt);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>

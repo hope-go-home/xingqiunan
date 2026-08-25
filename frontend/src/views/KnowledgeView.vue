@@ -1,6 +1,6 @@
 <!-- KnowledgeView.vue — 知识库管理页。添加 / 搜索 / 列表 / 删除。 -->
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api/index'
 
 // 添加文档（粘贴文本）
@@ -12,8 +12,8 @@ async function handleAdd() {
   if (!addText.value.trim()) return
   adding.value = true; addMsg.value = ''
   try {
-    const { data } = await api.post('/knowledge/add', null, { params: { text: addText.value.trim() } })
-    addMsg.value = '已添加 (ID: ' + data.doc_id + ')'
+    const { data } = await api.post('/knowledge/add', { text: addText.value.trim() })
+    addMsg.value = '已添加（' + data.chunks + ' 块）'
     addText.value = ''
     fetchList()
   } catch (e) {
@@ -79,11 +79,34 @@ async function fetchList() {
   } finally { listLoading.value = false }
 }
 
-async function handleDelete(docId) {
+// 批量选择删除
+const selected = ref([])
+const deletingBatch = ref(false)
+
+function toggleSelect(id) {
+  const i = selected.value.indexOf(id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(id)
+}
+function toggleAll() {
+  selected.value = selected.value.length === documents.value.length ? [] : documents.value.map(d => d.id)
+}
+const allSelected = computed(() => documents.value.length > 0 && selected.value.length === documents.value.length)
+
+async function deleteSelected() {
+  const n = selected.value.length
+  if (!n) return
+  if (!window.confirm('删除选中的 ' + n + ' 篇文档？')) return
+  deletingBatch.value = true
   try {
-    await api.delete('/knowledge/' + docId)
-    documents.value = documents.value.filter(d => d.id !== docId)
-  } catch { /* ignore */ }
+    await api.post('/knowledge/batch_delete', { ids: [...selected.value] })
+    const gone = new Set(selected.value)
+    documents.value = documents.value.filter(d => !gone.has(d.id))
+    selected.value = []
+    fetchList()
+  } catch {
+    window.alert('批量删除失败，请重试')
+  } finally { deletingBatch.value = false }
 }
 
 onMounted(fetchList)
@@ -151,6 +174,17 @@ onMounted(fetchList)
           <h2 class="section-title">全部文档</h2>
           <span class="doc-count">{{ documents.length }} 篇</span>
         </div>
+
+        <div v-if="documents.length > 0" class="batch-bar">
+          <label class="select-all">
+            <input type="checkbox" :checked="allSelected" @change="toggleAll" />
+            <span>全选</span>
+          </label>
+          <button v-if="selected.length > 0" class="btn btn-danger btn-sm" :disabled="deletingBatch" @click="deleteSelected">
+            {{ deletingBatch ? '删除中…' : '删除选中（' + selected.length + '）' }}
+          </button>
+        </div>
+
         <div v-if="listLoading" class="empty-hint">加载中…</div>
         <div v-else-if="documents.length === 0" class="empty-state">
           <div class="empty-icon">▣</div>
@@ -158,11 +192,14 @@ onMounted(fetchList)
         </div>
         <div v-else class="doc-list">
           <div v-for="doc in documents" :key="doc.id" class="doc-row">
+            <input type="checkbox" class="doc-check" :checked="selected.includes(doc.id)" @change="toggleSelect(doc.id)" />
             <div class="doc-body">
-              <span class="doc-id">{{ doc.id.slice(0, 8) }}…</span>
-              <p class="doc-content">{{ doc.content }}</p>
+              <div class="doc-title-row">
+                <span class="doc-title">{{ doc.title }}</span>
+                <span class="doc-chunks">{{ doc.chunks }} 块</span>
+              </div>
+              <p class="doc-content">{{ doc.preview }}</p>
             </div>
-            <button class="btn btn-danger btn-sm" @click="handleDelete(doc.id)">删除</button>
           </div>
         </div>
       </section>
@@ -194,11 +231,17 @@ onMounted(fetchList)
 .empty-icon { font-size: 32px; margin-bottom: 10px; color: var(--muted); }
 .empty-hint { text-align: center; padding: 20px; color: var(--slate); }
 
+.batch-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.select-all { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--slate); cursor: pointer; }
+.doc-check { width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; accent-color: var(--cobalt); }
+
 .doc-list { display: flex; flex-direction: column; gap: 10px; }
 .doc-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: var(--steel); border-radius: var(--radius-sm); }
 .doc-body { flex: 1; min-width: 0; }
-.doc-id { font-size: 10px; font-family: var(--font-mono); color: var(--muted); }
-.doc-content { font-size: 13px; color: var(--ink); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.doc-title { font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-chunks { font-size: 10px; font-family: var(--font-mono); color: var(--slate); background: var(--border); padding: 1px 6px; border-radius: 99px; flex-shrink: 0; }
+.doc-content { font-size: 12px; color: var(--slate); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .btn-sm { padding: 5px 10px; font-size: 11px; }
 

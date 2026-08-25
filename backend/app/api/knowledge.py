@@ -1,6 +1,7 @@
 # 知识库路由：上传文档到知识库、搜索、查看列表、删除
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user_id
@@ -12,16 +13,22 @@ router = APIRouter(prefix="/knowledge", tags=["知识库"])
 MAX_KNOWLEDGE_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
+class AddTextRequest(BaseModel):
+    text: str
+
+
 @router.post("/add")
 async def add_document(
-    text: str = Query(..., description="文档内容"),
+    req: AddTextRequest,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    """添加文本到知识库"""
+    """添加文本到知识库（JSON body，避免长文本超出 URL 长度限制）"""
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="内容不能为空")
     service = KnowledgeService(db, user_id)
-    doc_id = await service.add_document(text)
-    return {"doc_id": doc_id, "message": "添加成功"}
+    doc_ids = await service.add_document(req.text)
+    return {"doc_id": doc_ids[0], "chunks": len(doc_ids), "message": "添加成功"}
 
 
 @router.post("/upload")
@@ -82,7 +89,26 @@ async def delete_document(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    """删除知识库中的文档"""
+    """删除知识库中的文档（整篇所有分块）"""
     service = KnowledgeService(db, user_id)
     await service.delete_document(doc_id)
     return {"message": "删除成功"}
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[str]
+
+
+@router.post("/batch_delete")
+async def batch_delete_documents(
+    req: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """批量删除多篇文档"""
+    if not req.ids:
+        raise HTTPException(status_code=400, detail="未选择要删除的文档")
+    service = KnowledgeService(db, user_id)
+    for gid in req.ids:
+        await service.delete_document(gid)
+    return {"deleted": len(req.ids), "message": f"已删除 {len(req.ids)} 篇文档"}

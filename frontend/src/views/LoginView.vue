@@ -45,17 +45,18 @@ function toggleMode() {
 
 <template>
   <div class="login-page">
-    <!-- 左侧品牌区 -->
+    <!-- 左侧品牌区：制图板上的图纸 -->
     <div class="login-hero">
-      <div class="hero-content">
-        <div class="hero-logo">◆</div>
-        <h1 class="hero-title">TaskBench</h1>
-        <p class="hero-desc">智能任务自动化工作台<br/>AI 驱动的任务编排与知识管理</p>
-      </div>
-      <div class="hero-pulses">
-        <span class="hero-pulse" style="--delay: 0s"></span>
-        <span class="hero-pulse" style="--delay: 0.6s"></span>
-        <span class="hero-pulse" style="--delay: 1.2s"></span>
+      <div class="hero-sheet">
+        <span class="reg-mark reg-tl">+</span>
+        <span class="reg-mark reg-tr">+</span>
+        <span class="reg-mark reg-bl">+</span>
+        <span class="reg-mark reg-br">+</span>
+        <div class="hero-content">
+          <p class="hero-eyebrow">AGENT WORKBENCH</p>
+          <h1 class="hero-title">TaskBench</h1>
+          <p class="hero-desc">智能任务自动化工作台<br/>AI 驱动的任务编排与知识管理</p>
+        </div>
       </div>
     </div>
 
@@ -100,32 +101,65 @@ function toggleMode() {
 <style scoped>
 .login-page { display: flex; height: 100%; background: var(--paper); }
 
-/* 左侧品牌区 */
+/* 左侧品牌区：铺在制图板上的图纸 */
 .login-hero {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; background: linear-gradient(135deg, #EEF1FE 0%, #F8F9FB 100%);
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 28px 28px;
   position: relative; overflow: hidden;
 }
-.hero-content { text-align: center; z-index: 1; }
-.hero-logo { font-size: 48px; color: var(--cobalt); margin-bottom: 16px; }
-.hero-title { font-size: 32px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink); margin-bottom: 12px; }
-.hero-desc { color: var(--slate); font-size: 14px; line-height: 1.8; }
 
-.hero-pulses { position: absolute; bottom: 60px; display: flex; gap: 24px; }
-.hero-pulse {
-  display: block; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--cobalt); animation: hero-anim 2s ease-in-out infinite;
-  animation-delay: var(--delay); opacity: 0.25;
+/* 图纸：内缩的图框 */
+.hero-sheet {
+  position: relative;
+  padding: 72px 88px;
+  border: 1.5px solid var(--ink);
+  outline: 1px solid var(--border);
+  outline-offset: 6px;
+  border-radius: 2px;
+  text-align: center;
 }
-@keyframes hero-anim {
-  0%, 100% { transform: scale(1); opacity: 0.25; }
-  50%      { transform: scale(2.5); opacity: 0; }
+
+/* 四角对位标记（印刷套准线） */
+.reg-mark {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--vermilion);
+  line-height: 1;
+}
+.reg-tl { top: -8px; left: -6px; }
+.reg-tr { top: -8px; right: -6px; }
+.reg-bl { bottom: -8px; left: -6px; }
+.reg-br { bottom: -8px; right: -6px; }
+
+.hero-content { z-index: 1; }
+
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--slate);
+  margin-bottom: 14px;
+}
+.hero-title { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; color: var(--ink); margin-bottom: 12px; }
+.hero-desc { color: var(--slate); font-size: 14px; line-height: 1.8; }
+.hero-desc::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 2px;
+  background: var(--cobalt);
+  margin: 20px auto 0;
 }
 
 /* 右侧表单区 */
-.login-panel { width: 440px; min-width: 440px; display: flex; align-items: center; justify-content: center; padding: 40px; background: var(--white); }
+.login-panel { width: 440px; min-width: 440px; display: flex; align-items: center; justify-content: center; padding: 40px; background: var(--white); border-left: 1px solid var(--border); }
 .login-card { width: 100%; max-width: 360px; }
-.card-heading { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 24px; }
+.card-heading { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink); margin-bottom: 24px; }
 
 .alert { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 20px; }
 .alert-error   { background: var(--crimson-bg); color: var(--crimson); border: 1px solid rgba(239,68,68,0.2); }

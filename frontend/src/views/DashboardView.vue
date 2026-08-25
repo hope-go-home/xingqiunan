@@ -126,9 +126,10 @@ const tools = [
 .quick-card {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 20px 16px; border-radius: var(--radius-md); background: var(--white);
-  border: 1px solid var(--border); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  border: 1px solid var(--border); cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
-.quick-card:hover { border-color: var(--cobalt); box-shadow: 0 2px 12px rgba(79,110,247,0.12); }
+.quick-card:hover { border-color: var(--cobalt); box-shadow: 0 2px 12px rgba(61,91,245,0.14); transform: translateY(-2px); }
 .qc-icon { font-size: 28px; color: var(--cobalt); }
 .qc-label { font-size: 15px; font-weight: 700; color: var(--ink); }
 .qc-desc { font-size: 11px; color: var(--slate); }
@@ -136,11 +137,12 @@ const tools = [
 /* ========== 工具分组 ========== */
 .tool-groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
 .tool-group { padding: 18px 20px; }
-.group-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.group-title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); letter-spacing: 0.06em; }
 .tool-list { display: flex; flex-direction: column; gap: 10px; }
 .tool-item { display: flex; align-items: baseline; gap: 10px; }
 .tool-name {
-  font-size: 13px; font-weight: 600; color: var(--cobalt);
+  font-family: var(--font-mono);
+  font-size: 12px; font-weight: 600; color: var(--cobalt);
   white-space: nowrap; min-width: 78px; flex-shrink: 0;
 }
 .tool-desc { font-size: 12px; color: var(--slate); line-height: 1.5; }

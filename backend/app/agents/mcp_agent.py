@@ -209,12 +209,12 @@ def _llm_invoke(llm, prompt: str):
 def _llm_invoke_with_failover(prompt: str):
     """主模型调用，失败自动切备用模型 + failover 指标"""
     from app.core.metrics import llm_calls_total
+    primary = _create_llm()
     try:
-        return _llm_invoke(_create_llm(), prompt)
+        return _llm_invoke(primary, prompt)
     except Exception as e:
         logger.warning("主模型调用失败 (%s)，尝试备用模型", e)
-        model = getattr(_create_llm(), "model_name", "unknown")
-        llm_calls_total.labels(model=model, status="failover").inc()
+        llm_calls_total.labels(model=getattr(primary, "model_name", "unknown"), status="failover").inc()
         fallback = _create_llm_fallback()
         if fallback is None:
             raise

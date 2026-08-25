@@ -139,10 +139,21 @@ def _safe_path(user_id: int, path: str) -> str:
     return full
 
 
+_sync_engine_instance = None
+
+
 def _sync_engine():
-    """同步 SQLAlchemy 引擎（psycopg2），供工具内直连数据库使用"""
-    from sqlalchemy import create_engine
-    return create_engine(DATABASE_URL.replace("+asyncpg", "+psycopg2"))
+    """同步 SQLAlchemy 引擎（psycopg2），模块级缓存复用连接池（此前每次调用新建+销毁，开销大）"""
+    global _sync_engine_instance
+    if _sync_engine_instance is None:
+        from sqlalchemy import create_engine
+        _sync_engine_instance = create_engine(
+            DATABASE_URL.replace("+asyncpg", "+psycopg2"),
+            pool_pre_ping=True,
+            pool_size=2,
+            max_overflow=3,
+        )
+    return _sync_engine_instance
 
 
 # === 工具底层实现（同步、入参已校验）===
@@ -226,19 +237,16 @@ def _create_task(user_id: int, title: str, task_type: str = "document_process", 
 
     try:
         engine = _sync_engine()
-        try:
-            with engine.connect() as conn:
-                row = conn.execute(
-                    text(
-                        "INSERT INTO tasks (title, description, status, task_type, user_id, created_at, updated_at) "
-                        "VALUES (:title, :desc, 'pending', :tt, :uid, NOW(), NOW()) RETURNING id"
-                    ),
-                    {"title": str(title)[:256], "desc": str(description or "")[:2000], "tt": task_type, "uid": user_id},
-                ).fetchone()
-                conn.commit()
-                task_id = row[0]
-        finally:
-            engine.dispose()
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "INSERT INTO tasks (title, description, status, task_type, user_id, created_at, updated_at) "
+                    "VALUES (:title, :desc, 'pending', :tt, :uid, NOW(), NOW()) RETURNING id"
+                ),
+                {"title": str(title)[:256], "desc": str(description or "")[:2000], "tt": task_type, "uid": user_id},
+            ).fetchone()
+            conn.commit()
+            task_id = row[0]
 
         try:
             from app.tasks.file_tasks import execute_task
@@ -260,26 +268,23 @@ def _list_tasks(user_id: int, status_filter: str = "") -> str:
 
     try:
         engine = _sync_engine()
-        try:
-            with engine.connect() as conn:
-                if status_filter:
-                    rows = conn.execute(
-                        text(
-                            "SELECT id, title, status, task_type, created_at FROM tasks "
-                            "WHERE user_id = :uid AND status = :s ORDER BY created_at DESC LIMIT 20"
-                        ),
-                        {"uid": user_id, "s": status_filter},
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        text(
-                            "SELECT id, title, status, task_type, created_at FROM tasks "
-                            "WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20"
-                        ),
-                        {"uid": user_id},
-                    ).fetchall()
-        finally:
-            engine.dispose()
+        with engine.connect() as conn:
+            if status_filter:
+                rows = conn.execute(
+                    text(
+                        "SELECT id, title, status, task_type, created_at FROM tasks "
+                        "WHERE user_id = :uid AND status = :s ORDER BY created_at DESC LIMIT 20"
+                    ),
+                    {"uid": user_id, "s": status_filter},
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    text(
+                        "SELECT id, title, status, task_type, created_at FROM tasks "
+                        "WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20"
+                    ),
+                    {"uid": user_id},
+                ).fetchall()
 
         if not rows:
             return "当前没有任何任务"
