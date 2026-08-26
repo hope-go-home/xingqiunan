@@ -24,14 +24,27 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """应用启动时调用：用 Alembic 管理表结构（替代 create_all）"""
+    """应用启动时调用：用 Alembic 子进程管理表结构。
+
+    用子进程而非 in-process 的 command.upgrade：在 Windows + Python 3.13 下，
+    进程内跑 Alembic 会卡死在 startup 阶段（实测命令行秒过、进程内必卡）。
+    子进程是干净环境，且不影响父进程的日志配置。
+    """
     import asyncio
-    from alembic.config import Config
-    from alembic import command
+    import subprocess
+    import sys
 
-    alembic_cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    backend_dir = str(Path(__file__).resolve().parents[2])
 
-    def _run():
-        command.upgrade(alembic_cfg, "head")
+    def _run() -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=backend_dir,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
 
-    await asyncio.to_thread(_run)
+    result = await asyncio.to_thread(_run)
+    if result.returncode != 0:
+        raise RuntimeError(f"Alembic 迁移失败:\n{result.stdout}\n{result.stderr}")

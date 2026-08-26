@@ -352,7 +352,6 @@ async def websocket_chat(websocket: WebSocket):
         await websocket.close(code=4401, reason="Unauthorized")
         return
 
-    user_id = str(user_id)  # 转字符串，统一作为连接标识
     await manager.connect(user_id, websocket)
     session_id = ""
     current_session = ""

@@ -21,7 +21,7 @@ config = context.config
 
 # 日志配置
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # 设置目标 metadata（autogenerate 依赖）
 target_metadata = Base.metadata
