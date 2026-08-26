@@ -1,0 +1,168 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0"><data>
+  <shape type="text" topLeftX="80" topLeftY="44" width="600" height="44">
+    <content textType="title" fontSize="30" fontFamily="思源宋体" color="rgba(42, 45, 48, 1)" bold="true" letterSpacing="1">
+      <p>纵深安全设计</p>
+    </content>
+  </shape>
+  <line startX="80" startY="100" endX="880" endY="100">
+    <border color="rgba(204, 209, 204, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="80" topLeftY="116" width="300" height="26">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true" letterSpacing="1" wrap="false">
+      <p>四层防御 · DEFENSE IN DEPTH</p>
+    </content>
+  </shape>
+
+  <shape type="text" topLeftX="56" topLeftY="158" width="28" height="20">
+    <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" textAlign="right" bold="true">
+      <p>外</p>
+    </content>
+  </shape>
+  <line startX="92" startY="164" endX="92" endY="434">
+    <border color="rgba(76, 122, 90, 1)" width="2"/>
+    <endArrow type="solid-triangle"/>
+  </line>
+  <shape type="text" topLeftX="56" topLeftY="428" width="28" height="20">
+    <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" textAlign="right" bold="true">
+      <p>内</p>
+    </content>
+  </shape>
+
+  <shape type="rect" topLeftX="120" topLeftY="150" width="760" height="70">
+    <fill>
+      <fillColor color="rgba(220, 230, 214, 0.5)"/>
+    </fill>
+    <border color="rgba(76, 122, 90, 1)" width="1"/>
+  </shape>
+  <shape type="rect" topLeftX="120" topLeftY="150" width="6" height="70">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 0.45)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="150" topLeftY="162" width="50" height="40">
+    <content fontSize="24" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>01</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="158" width="300" height="30">
+    <content fontSize="18" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>身份认证层</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="192" width="650" height="24">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)">
+      <p>JWT 令牌 + bcrypt 密码哈希，24 小时有效期；WebSocket 握手同步校验身份</p>
+    </content>
+  </shape>
+
+  <shape type="rect" topLeftX="120" topLeftY="230" width="760" height="70">
+    <fill>
+      <fillColor color="rgba(220, 230, 214, 0.5)"/>
+    </fill>
+    <border color="rgba(76, 122, 90, 1)" width="1"/>
+  </shape>
+  <shape type="rect" topLeftX="120" topLeftY="230" width="6" height="70">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 0.65)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="150" topLeftY="242" width="50" height="40">
+    <content fontSize="24" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>02</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="238" width="300" height="30">
+    <content fontSize="18" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>数据隔离层</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="272" width="650" height="24">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)">
+      <p>多租户文件沙箱（user_id 目录隔离、防路径穿越）；上传类型白名单与大小限制</p>
+    </content>
+  </shape>
+
+  <shape type="rect" topLeftX="120" topLeftY="310" width="760" height="70">
+    <fill>
+      <fillColor color="rgba(220, 230, 214, 0.5)"/>
+    </fill>
+    <border color="rgba(76, 122, 90, 1)" width="1"/>
+  </shape>
+  <shape type="rect" topLeftX="120" topLeftY="310" width="6" height="70">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 0.85)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="150" topLeftY="322" width="50" height="40">
+    <content fontSize="24" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>03</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="318" width="300" height="30">
+    <content fontSize="18" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>AI 安全层</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="352" width="650" height="24">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)">
+      <p>Prompt 注入数据标记防御；SSRF 目标地址校验；危险命令拦截与拒绝模式</p>
+    </content>
+  </shape>
+
+  <shape type="rect" topLeftX="120" topLeftY="390" width="760" height="70">
+    <fill>
+      <fillColor color="rgba(220, 230, 214, 0.5)"/>
+    </fill>
+    <border color="rgba(76, 122, 90, 1)" width="1"/>
+  </shape>
+  <shape type="rect" topLeftX="120" topLeftY="390" width="6" height="70">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 1)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="150" topLeftY="402" width="50" height="40">
+    <content fontSize="24" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>04</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="398" width="300" height="30">
+    <content fontSize="18" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>操作控制层</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="212" topLeftY="432" width="650" height="24">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)">
+      <p>删除/移动/执行命令等高危操作需人工确认；任务计划先行确认后执行</p>
+    </content>
+  </shape>
+
+  <shape type="rect" topLeftX="80" topLeftY="476" width="6" height="24">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 1)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="96" topLeftY="478" width="780" height="26">
+    <content fontSize="14" fontFamily="思源宋体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>任一层被绕过，下一层继续兜底 —— 安全防线不依赖单点防护</p>
+    </content>
+  </shape>
+
+  <line startX="80" startY="514" endX="880" endY="514">
+    <border color="rgba(226, 229, 225, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="820" topLeftY="518" width="60" height="20">
+    <content fontSize="11" fontFamily="思源黑体" color="rgba(150, 158, 151, 1)" textAlign="right">
+      <p>14</p>
+    </content>
+  </shape>
+</data>
+<note>
+  <content textType="body">
+    <p>安全设计采用纵深防御思想，按由外到内共分四层。</p>
+    <p>第一层身份认证：JWT 令牌加 bcrypt 密码哈希，令牌 24 小时有效，WebSocket 握手时同步校验身份。</p>
+    <p>第二层数据隔离：多租户文件沙箱按 user_id 隔离目录，防止路径穿越，上传做类型白名单和大小限制。</p>
+    <p>第三层 AI 安全：对 Prompt 注入采用数据标记防御，对 SSRF 做目标地址校验，并拦截危险命令。</p>
+    <p>第四层操作控制：删除、移动、执行命令等高危操作要求人工确认，任务计划先行确认再执行。任何一层被绕过，下一层仍会兜底，安全不依赖单点防护。</p>
+  </content>
+</note>
+</slide>

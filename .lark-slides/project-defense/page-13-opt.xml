@@ -1,0 +1,55 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0"><data>
+  <shape type="rect" topLeftX="0" topLeftY="0" width="960" height="540">
+    <fill>
+      <fillColor color="rgba(42, 45, 48, 1)"/>
+    </fill>
+  </shape>
+  <shape type="rect" topLeftX="0" topLeftY="0" width="10" height="540">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 1)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="88" topLeftY="72" width="360" height="34">
+    <content fontSize="15" fontFamily="思源黑体" color="rgba(172, 200, 181, 1)" letterSpacing="3">
+      <p>第四部分 · PART 04</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="88" topLeftY="120" width="280" height="150">
+    <content textType="title" fontSize="96" fontFamily="思源宋体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>04</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="88" topLeftY="296" width="760" height="60">
+    <content textType="title" fontSize="40" fontFamily="思源宋体" color="rgba(255, 255, 255, 1)" bold="true" letterSpacing="2">
+      <p>安全与可靠性设计</p>
+    </content>
+  </shape>
+  <shape type="rect" topLeftX="90" topLeftY="376" width="120" height="4">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 1)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="88" topLeftY="404" width="740" height="40">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(206, 213, 207, 1)">
+      <p>如何在 AI 能力之上保证安全与可控？—— 纵深防御 + 成本与可靠性保障</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="88" topLeftY="478" width="760" height="28">
+    <content fontSize="15" fontFamily="思源黑体" color="rgba(206, 213, 207, 1)" letterSpacing="1">
+      <p><span color="rgba(76, 122, 90, 1)" bold="true">01</span>　纵深防御体系 —— 四层安全架构逐层设防</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="88" topLeftY="508" width="760" height="28">
+    <content fontSize="15" fontFamily="思源黑体" color="rgba(206, 213, 207, 1)" letterSpacing="1">
+      <p><span color="rgba(76, 122, 90, 1)" bold="true">02</span>　成本与可靠性保障 —— 熔断、重试、审计与监控</p>
+    </content>
+  </shape>
+</data>
+<note>
+  <content textType="body">
+    <p>第四部分是安全与可靠性设计，这是本项目区别于普通 AI Demo 的重要部分。</p>
+    <p>本部分包含两块内容：一是 AI 自主执行工具时的安全问题，采用由外到内的四层纵深防御体系；二是大模型调用的成本与稳定性问题，设计了成本熔断与可靠性保障机制。</p>
+    <p>整体目标是在 AI 能力之上保证系统安全、可控、稳定。</p>
+  </content>
+</note>
+</slide>

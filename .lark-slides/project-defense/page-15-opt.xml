@@ -1,0 +1,151 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0"><data>
+  <shape type="text" topLeftX="80" topLeftY="44" width="600" height="44">
+    <content textType="title" fontSize="30" fontFamily="思源宋体" color="rgba(42, 45, 48, 1)" bold="true" letterSpacing="1">
+      <p>成本控制与可靠性保障</p>
+    </content>
+  </shape>
+  <line startX="80" startY="100" endX="880" endY="100">
+    <border color="rgba(204, 209, 204, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="80" topLeftY="122" width="300" height="26">
+    <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true" letterSpacing="1" wrap="false">
+      <p>成本控制 · COST CONTROL</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="80" topLeftY="162" width="46" height="40">
+    <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>01</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="142" topLeftY="164" width="300" height="32">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>token 用量计量</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="142" topLeftY="200" width="320" height="44">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+      <p>每次模型调用记录 token 消耗，支持用量核算与配额管理</p>
+    </content>
+  </shape>
+  <line startX="80" startY="250" endX="400" endY="250">
+    <border color="rgba(226, 229, 225, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="80" topLeftY="262" width="46" height="40">
+    <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>02</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="142" topLeftY="264" width="300" height="32">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>成本熔断保护</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="142" topLeftY="300" width="320" height="44">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+      <p>达到预算阈值自动熔断，防止 LLM 调用费用失控</p>
+    </content>
+  </shape>
+  <line startX="80" startY="350" endX="400" endY="350">
+    <border color="rgba(226, 229, 225, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="80" topLeftY="362" width="46" height="40">
+    <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>03</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="142" topLeftY="364" width="300" height="32">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>资源限制</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="142" topLeftY="400" width="320" height="44">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+      <p>工具调用轮数与超时受限，结果截断控制上下文成本</p>
+    </content>
+  </shape>
+  <line startX="470" startY="122" endX="470" endY="470">
+    <border color="rgba(204, 209, 204, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="510" topLeftY="122" width="300" height="26">
+    <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true" letterSpacing="1" wrap="false">
+      <p>可靠性保障 · RELIABILITY</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="510" topLeftY="162" width="46" height="40">
+    <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>01</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="572" topLeftY="164" width="300" height="32">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>重试与熔断限流</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="572" topLeftY="200" width="320" height="44">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+      <p>网络抖动自动重试，异常熔断与限流保护服务稳定</p>
+    </content>
+  </shape>
+  <line startX="510" startY="250" endX="880" endY="250">
+    <border color="rgba(226, 229, 225, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="510" topLeftY="262" width="46" height="40">
+    <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>02</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="572" topLeftY="264" width="300" height="32">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>审计日志</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="572" topLeftY="300" width="320" height="44">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+      <p>工具调用全程落盘（tool_calls.jsonl），可追溯可复盘</p>
+    </content>
+  </shape>
+  <line startX="510" startY="350" endX="880" endY="350">
+    <border color="rgba(226, 229, 225, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="510" topLeftY="362" width="46" height="40">
+    <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>03</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="572" topLeftY="364" width="300" height="32">
+    <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+      <p>指标监控</p>
+    </content>
+  </shape>
+  <shape type="text" topLeftX="572" topLeftY="400" width="320" height="44">
+    <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+      <p>Prometheus 暴露运行指标，支撑容量评估与告警</p>
+    </content>
+  </shape>
+  <shape type="rect" topLeftX="80" topLeftY="478" width="6" height="24">
+    <fill>
+      <fillColor color="rgba(76, 122, 90, 1)"/>
+    </fill>
+  </shape>
+  <shape type="text" topLeftX="96" topLeftY="480" width="780" height="26">
+    <content fontSize="14" fontFamily="思源宋体" color="rgba(76, 122, 90, 1)" bold="true">
+      <p>成本可控 · 运行稳定 · 全程可追溯 —— 让 AI 在安全边界内自主执行</p>
+    </content>
+  </shape>
+  <line startX="80" startY="514" endX="880" endY="514">
+    <border color="rgba(226, 229, 225, 1)" width="1"/>
+  </line>
+  <shape type="text" topLeftX="820" topLeftY="518" width="60" height="20">
+    <content fontSize="11" fontFamily="思源黑体" color="rgba(150, 158, 151, 1)" textAlign="right">
+      <p>15</p>
+    </content>
+  </shape>
+</data>
+<note>
+  <content textType="body">
+    <p>在成本控制方面，系统为每次模型调用记录 token 消耗，支持用量核算与配额管理；成本熔断机制在达到预算阈值时自动熔断，防止费用失控；同时通过工具调用轮数、超时限制和结果截断控制上下文成本。</p>
+    <p>在可靠性方面，实现了网络抖动自动重试、异常熔断与限流保护；工具调用全程写入审计日志，可追溯可复盘；通过 Prometheus 暴露运行指标，支撑容量评估与告警。</p>
+    <p>这些机制共同实现成本可控、运行稳定、全程可追溯，让 AI 在安全边界内自主执行。</p>
+  </content>
+</note>
+</slide>

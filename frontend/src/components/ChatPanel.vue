@@ -26,8 +26,6 @@ const connError = ref('')
 const currentSessionId = ref('')
 const pendingConfirm = ref(null)
 const allowForSession = ref(false)
-const pendingPlan = ref(null)
-const planAutoAllow = ref(false)
 const pendingReview = ref(null)   // 检查点审查 {id, step, preview}
 const reviewFeedback = ref('')
 const showSkills = ref(false)
@@ -94,8 +92,15 @@ function handleChunk(chunk) {
     pendingConfirm.value = { id: chunk.id, prompt: chunk.prompt }
     return
   }
-  if (chunk.type === 'plan_confirm_request') {
-    pendingPlan.value = { id: chunk.id, steps: chunk.steps || [] }
+  if (chunk.type === 'plan_ready') {
+    // 第一档 Plan Mode：计划作为消息卡片进入聊天流，等用户点「按此执行」
+    messages.value.push({
+      role: 'assistant', kind: 'plan',
+      content: chunk.markdown, planId: chunk.id,
+      autoAllow: false, approved: false, cancelled: false,
+    })
+    sending.value = false                       // 释放输入区，等待用户批准
+    scrollBottom()
     return
   }
   if (chunk.type === 'step_checkpoint') {
@@ -242,16 +247,23 @@ function respondConfirm(allow) {
   pendingConfirm.value = null
   allowForSession.value = false
 }
-function respondPlan(allow) {
-  if (!pendingPlan.value) return
+// 计划批准/取消（第一档 Plan Mode：计划卡片在聊天流内）
+function approvePlan(msg) {
+  if (msg.approved) return
   getClient().send({
     type: 'plan_confirm_response',
-    id: pendingPlan.value.id,
-    allow,
-    auto_allow: allow && planAutoAllow.value,
+    id: msg.planId,
+    allow: true,
+    auto_allow: !!msg.autoAllow,
   })
-  pendingPlan.value = null
-  planAutoAllow.value = false
+  msg.approved = true
+  sending.value = true                          // 重新进入等待回复状态
+}
+function cancelPlan(msg) {
+  if (msg.approved) return
+  getClient().send({ type: 'plan_confirm_response', id: msg.planId, allow: false })
+  msg.approved = true
+  msg.cancelled = true
 }
 
 // 检查点审查：继续执行 / 按反馈重做
@@ -351,31 +363,6 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
       <div v-if="connError" class="conn-banner">{{ connError }}</div>
       <div v-if="uploading" class="upload-banner">{{ uploading }}</div>
 
-      <!-- 长程规划确认弹窗 -->
-      <div v-if="pendingPlan" class="confirm-overlay">
-        <div class="confirm-modal plan-modal">
-          <div class="confirm-icon">🧭</div>
-          <div class="confirm-title">执行计划确认</div>
-          <div class="plan-steps">
-            <div v-for="(s, i) in pendingPlan.steps" :key="i" class="plan-step">
-              <span class="plan-step-no">{{ i + 1 }}</span>
-              <div class="plan-step-body">
-                <div class="plan-step-name">{{ s.name }}</div>
-                <div class="plan-step-action">{{ s.action }}</div>
-              </div>
-            </div>
-          </div>
-          <label class="confirm-checkbox">
-            <input type="checkbox" v-model="planAutoAllow" />
-            <span>自动允许本计划内的后续操作（执行中不再逐个询问）</span>
-          </label>
-          <div class="confirm-actions">
-            <button class="btn btn-ghost confirm-btn" @click="respondPlan(false)">取消</button>
-            <button class="btn btn-primary confirm-btn" @click="respondPlan(true)">开始执行</button>
-          </div>
-        </div>
-      </div>
-
       <!-- 检查点审查弹窗：关键交付物（如大纲）交用户审查 -->
       <div v-if="pendingReview" class="confirm-overlay">
         <div class="confirm-modal plan-modal">
@@ -414,7 +401,23 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
           <div class="empty-hint">普通模式自由对话 · Agent 模式 AI 自主调用 24 种工具<br/>点击 + 上传图片、音频、文档</div>
         </div>
         <div v-for="(msg, i) in messages" :key="i" :class="['msg-row', 'msg-' + msg.role]">
-          <div class="msg-bubble">
+          <!-- 计划卡片（第一档 Plan Mode） -->
+          <div v-if="msg.kind === 'plan'" class="msg-bubble plan-bubble">
+            <pre class="plan-md">{{ msg.content }}</pre>
+            <div v-if="!msg.approved" class="plan-approve">
+              <label class="confirm-checkbox">
+                <input type="checkbox" v-model="msg.autoAllow" />
+                <span>自动允许本计划内后续操作</span>
+              </label>
+              <div class="plan-actions">
+                <button class="btn btn-ghost btn-xs" @click="cancelPlan(msg)">取消</button>
+                <button class="btn btn-primary btn-xs" @click="approvePlan(msg)">▶ 按此执行</button>
+              </div>
+            </div>
+            <div v-else class="plan-approved">{{ msg.cancelled ? '已取消该计划' : '✓ 已批准，执行中…' }}</div>
+          </div>
+          <!-- 普通消息气泡 -->
+          <div v-else class="msg-bubble">
             <span v-if="msg.webSearch" class="search-badge">🌐 已联网搜索</span>
             <span class="msg-text">{{ msg.content }}</span>
             <span v-if="msg.streaming" class="typing-cursor">▌</span>
@@ -572,6 +575,16 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
   background: var(--verdant-bg, #e3f4ec); color: var(--verdant);
   border-radius: 999px; font-size: 10px; font-weight: 600;
 }
+
+/* 计划卡片（Plan Mode） */
+.plan-bubble { max-width: 92%; background: var(--cobalt-bg) !important; border: 1px solid var(--cobalt); }
+.plan-md {
+  font-family: var(--font-body); font-size: 13px; line-height: 1.7; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word; margin: 0;
+}
+.plan-approve { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.plan-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.plan-approved { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--verdant); }
 .loading-bubble { padding: 14px 24px; }
 .loading-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin: 0 2px; animation: dot-bounce 1.2s ease-in-out infinite; }
 .loading-dots span:nth-child(2) { animation-delay: 0.2s; }

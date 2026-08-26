@@ -434,13 +434,17 @@ async def websocket_chat(websocket: WebSocket):
             box = {"allowed": False, "auto_allow": False}
             plan_confirm_events[cid] = (evt, box)
             try:
+                # 第一档 Plan Mode：计划渲染为 Markdown 推进聊天流，前端展示「按此执行」按钮
+                markdown = mcp_agent_mod._render_plan_markdown(user_input, plan)
                 _await_future(asyncio.run_coroutine_threadsafe(
                     manager.send_json(user_id, {
-                        "type": "plan_confirm_request",
+                        "type": "plan_ready",
                         "id": cid,
-                        "steps": [{"name": p["name"], "action": p["action"]} for p in plan],
+                        "markdown": markdown,
+                        "steps": [p["name"] for p in plan],
                     }), loop), 5)
-                _await_future(asyncio.run_coroutine_threadsafe(evt.wait(), loop), 180)
+                # 给用户充足的阅读/修改时间（10分钟），超时视为取消
+                _await_future(asyncio.run_coroutine_threadsafe(evt.wait(), loop), 600)
                 plan_auto_allow["flag"] = bool(box.get("auto_allow"))   # 本次执行期间生效
                 return box["allowed"]
             except Exception:

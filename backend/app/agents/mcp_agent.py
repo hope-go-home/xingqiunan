@@ -194,6 +194,19 @@ def set_step_review_handler(fn: Callable[[str, str], dict] | None):
     _step_review_handler = fn
 
 
+def _render_plan_markdown(user_input: str, plan: list[dict]) -> str:
+    """把结构化计划渲染成用户可读的 Markdown 文本（展示在聊天流里）"""
+    lines = [f"🧭 执行计划已生成，请确认", "", f"目标：{user_input[:200]}", ""]
+    for i, p in enumerate(plan, 1):
+        flag = " ⏸ *关键产出，执行后暂停等你审查*" if p.get("checkpoint") else ""
+        lines.append(f"**{i}. {p['name']}**{flag}")
+        lines.append(f"   {p['action'][:300]}")
+        lines.append("")
+    lines.append("---")
+    lines.append("确认无误后点击下方「▶ 按此执行」。勾选「自动允许」则执行中高危操作不再逐步询问。")
+    return "\n".join(lines)
+
+
 @resilient_call("dashscope")
 def _llm_invoke(llm, prompt: str):
     """带重试+熔断的 LLM 同步调用 + Prometheus 指标"""
@@ -325,7 +338,8 @@ class McpAgent:
         tool_names = [t.name for t in [*build_tools(user_id), *_get_mcp_tools()]]
         logger.info("[Agent] 收到请求 user_id=%s 规划开关=%s 工具=%s", user_id, planning, tool_names)
 
-        # 长程规划：跟随开关（默认全局配置），先让规划器判断任务复杂度
+        # 长程规划：跟随开关（默认全局配置）。开启时所有任务一律两阶段：
+        # 规划器判为 SIMPLE 的也生成单步计划，先经用户批准再执行
         planning_enabled = PLANNING_ENABLED if planning is None else planning
         if planning_enabled:
             try:
@@ -333,6 +347,9 @@ class McpAgent:
             except Exception as e:
                 logger.warning("规划器调用失败，降级为直接执行: %s", e)
                 plan = None
+            if not plan:
+                # SIMPLE/规划失败 → 单步计划兜底，保持"计划→批准→执行"统一体验
+                plan = [{"name": "直接执行", "action": user_input[:500], "checkpoint": False}]
             if plan:
                 # 用户确认环节：展示计划，确认后才执行
                 if _plan_confirm_handler is not None:
