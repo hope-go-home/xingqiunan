@@ -28,6 +28,8 @@ const pendingConfirm = ref(null)
 const allowForSession = ref(false)
 const pendingPlan = ref(null)
 const planAutoAllow = ref(false)
+const pendingReview = ref(null)   // 检查点审查 {id, step, preview}
+const reviewFeedback = ref('')
 const showSkills = ref(false)
 const skills = ref([])
 const loadingSkills = ref(false)
@@ -94,6 +96,12 @@ function handleChunk(chunk) {
   }
   if (chunk.type === 'plan_confirm_request') {
     pendingPlan.value = { id: chunk.id, steps: chunk.steps || [] }
+    return
+  }
+  if (chunk.type === 'step_checkpoint') {
+    pendingReview.value = { id: chunk.id, step: chunk.step, preview: chunk.preview || '' }
+    reviewFeedback.value = ''
+    scrollBottom()
     return
   }
   if (chunk.type === 'agent_stopped') {
@@ -246,6 +254,22 @@ function respondPlan(allow) {
   planAutoAllow.value = false
 }
 
+// 检查点审查：继续执行 / 按反馈重做
+function respondReview(redo) {
+  if (!pendingReview.value) return
+  getClient().send({
+    type: 'step_review_response',
+    id: pendingReview.value.id,
+    action: redo ? 'redo' : 'continue',
+    feedback: reviewFeedback.value.trim(),
+  })
+  if (redo && reviewFeedback.value.trim()) {
+    toolLog.push(`🔄 按反馈重做：${pendingReview.value.step}（${reviewFeedback.value.trim().slice(0, 40)}）`)
+  }
+  pendingReview.value = null
+  reviewFeedback.value = ''
+}
+
 function onClickOutside(e) { if (!e.target.closest('.plus-area')) showMenu.value = false }
 
 onMounted(() => { getClient(); loadSessions(); document.addEventListener('click', onClickOutside) })
@@ -348,6 +372,21 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
           <div class="confirm-actions">
             <button class="btn btn-ghost confirm-btn" @click="respondPlan(false)">取消</button>
             <button class="btn btn-primary confirm-btn" @click="respondPlan(true)">开始执行</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 检查点审查弹窗：关键交付物（如大纲）交用户审查 -->
+      <div v-if="pendingReview" class="confirm-overlay">
+        <div class="confirm-modal plan-modal">
+          <div class="confirm-icon">📋</div>
+          <div class="confirm-title">检查点审查：{{ pendingReview.step }}</div>
+          <pre class="review-preview">{{ pendingReview.preview }}</pre>
+          <textarea v-model="reviewFeedback" class="form-textarea review-feedback"
+                    placeholder="反馈意见（选填）。填了再点「按反馈重做」，Agent 会调整产出；留空点「继续执行」直接往下走…" rows="3"></textarea>
+          <div class="confirm-actions">
+            <button class="btn btn-ghost confirm-btn" @click="respondReview(false)">继续执行</button>
+            <button class="btn btn-primary confirm-btn" :disabled="!reviewFeedback.trim()" @click="respondReview(true)">按反馈重做</button>
           </div>
         </div>
       </div>
@@ -509,6 +548,15 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .plan-step-body { flex: 1; min-width: 0; }
 .plan-step-name { font-size: 13px; font-weight: 700; color: var(--ink); }
 .plan-step-action { font-size: 12px; color: var(--slate); margin-top: 2px; line-height: 1.5; word-break: break-all; }
+
+/* 检查点审查 */
+.review-preview {
+  max-height: 300px; overflow-y: auto; background: var(--steel);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px;
+  font-size: 13px; line-height: 1.6; color: var(--ink); white-space: pre-wrap;
+  word-break: break-word; font-family: var(--font-body); text-align: left;
+}
+.review-feedback { margin-bottom: 14px; font-size: 12px; }
 
 .chat-messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .chat-empty { text-align: center; padding: 64px 16px; color: var(--slate); }

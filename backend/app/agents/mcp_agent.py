@@ -58,9 +58,13 @@ PLAN_PROMPT = """你是 TaskBench 任务规划器。判断用户需求是否需�
    "查杭州天气"、"帮我搜一下XX"）——只输出一行：SIMPLE
 2. 否则，把任务拆解为 2~5 个有序子任务。每个子任务必须是一个 Agent 借助以下工具
    可以独立完成的：{tools}
+3. 如果某个子任务会产出"关键中间交付物"（如大纲、方案、要点列表、设计稿），
+   且后续步骤都基于它展开——给该步加上 "checkpoint": true。
+   执行到该步会暂停，把产出展示给用户审查（可调整方向）后再继续。
 
 严格输出格式（不要解释、不要 Markdown 代码块）：
-[{{"name": "步骤名", "action": "给执行者的具体指令，包含必要参数"}}, ...]
+[{{"name": "步骤名", "action": "给执行者的具体指令，包含必要参数", "checkpoint": true}}, ...]
+（checkpoint 仅在需要用户审查的步骤上加，其余步骤省略此字段）
 
 用户需求：{input}"""
 
@@ -180,6 +184,16 @@ def set_plan_confirm_handler(fn: Callable[[str, list[dict]], bool] | None):
     _plan_confirm_handler = fn
 
 
+# 检查点审查回调（chat.py 注入）：fn(step_name, result) -> {"action": "continue"|"redo", "feedback": str}
+_step_review_handler: Callable[[str, str], dict] | None = None
+
+
+def set_step_review_handler(fn: Callable[[str, str], dict] | None):
+    """注入检查点审查回调：执行到 checkpoint 步骤时暂停，把产出交给用户审查"""
+    global _step_review_handler
+    _step_review_handler = fn
+
+
 @resilient_call("dashscope")
 def _llm_invoke(llm, prompt: str):
     """带重试+熔断的 LLM 同步调用 + Prometheus 指标"""
@@ -289,7 +303,8 @@ class McpAgent:
         cleaned = []
         for p in plan[:5]:
             if isinstance(p, dict) and p.get("name") and p.get("action"):
-                cleaned.append({"name": str(p["name"])[:60], "action": str(p["action"])[:500]})
+                cleaned.append({"name": str(p["name"])[:60], "action": str(p["action"])[:500],
+                                "checkpoint": bool(p.get("checkpoint"))})
         return cleaned or None
 
     # ─── 汇总器：把子任务结果组织成最终回答 ───
@@ -393,6 +408,22 @@ class McpAgent:
                     )
 
             results.append(f"【第 {i} 步：{step['name']}】\n{r}")
+
+            # ─── 检查点：关键交付物暂停，交用户审查（可带反馈重做）───
+            if step.get("checkpoint") and self._is_valid_result(r) and _step_review_handler:
+                _emit(on_event, {"type": "step_preview", "index": i, "name": step["name"]})
+                review = await asyncio.to_thread(_step_review_handler, step["name"], r)
+                if review.get("action") == "redo":
+                    logger.info("[Checkpoint] 步骤%d 用户要求按反馈重做", i)
+                    feedback = str(review.get("feedback", ""))[:800]
+                    try:
+                        r = await self._arun_single(
+                            f"{step_input}\n\n用户审查反馈（必须按反馈调整产出）：{feedback}",
+                            user_id, history, None, emit_answer=False,
+                            step_budget=self.max_steps * 2)
+                        results[-1] = f"【第 {i} 步：{step['name']}（已按反馈重做）】\n{r}"
+                    except Exception as e:
+                        r = f"重做出错: {e}"
 
         # ─── Reflection：自我审查一致性 ───
         # _reflect_sync 是同步方法（内部有阻塞网络调用），必须丢线程，不能直接 await

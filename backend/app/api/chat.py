@@ -248,6 +248,13 @@ def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: di
             box["allowed"] = bool(msg.get("allow"))
             box["auto_allow"] = bool(msg.get("auto_allow"))   # 用户勾选"自动允许本计划内后续操作"
             evt.set()
+    elif msg.get("type") == "step_review_response":
+        cid = str(msg.get("id", ""))
+        if cid in step_review_events:
+            evt, box = step_review_events[cid]
+            box["action"] = "redo" if msg.get("action") == "redo" else "continue"
+            box["feedback"] = str(msg.get("feedback", ""))[:800]
+            evt.set()
 
 
 class _AgentStopped(Exception):
@@ -444,13 +451,41 @@ async def websocket_chat(websocket: WebSocket):
 
     mcp_agent_mod.set_plan_confirm_handler(make_plan_confirm_handler())
 
+    # 检查点审查机制：执行到 checkpoint 步骤暂停，产出推给用户审查（继续/带反馈重做）
+    step_review_events: dict[str, tuple] = {}
+
+    def make_step_review_handler():
+        def handler(step_name: str, result_text: str) -> dict:
+            cid = uuid.uuid4().hex[:12]
+            evt = asyncio.Event()
+            box = {"action": "continue", "feedback": ""}
+            step_review_events[cid] = (evt, box)
+            try:
+                _await_future(asyncio.run_coroutine_threadsafe(
+                    manager.send_json(user_id, {
+                        "type": "step_checkpoint",
+                        "id": cid,
+                        "step": step_name,
+                        "preview": (result_text or "")[:1500],
+                    }), loop), 5)
+                # 给用户充足的审查时间（10分钟），超时默认继续
+                _await_future(asyncio.run_coroutine_threadsafe(evt.wait(), loop), 600)
+                return box
+            except Exception:
+                return {"action": "continue"}
+            finally:
+                step_review_events.pop(cid, None)
+        return handler
+
+    mcp_agent_mod.set_step_review_handler(make_step_review_handler())
+
     try:
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
 
             # 高危命令人工确认响应：设置事件供 fs_tools 确认回调等待
-            if msg.get("type") in ("confirm_response", "plan_confirm_response"):
+            if msg.get("type") in ("confirm_response", "plan_confirm_response", "step_review_response"):
                 _handle_confirm_msg(msg, confirm_events, plan_confirm_events)
                 continue
 
@@ -561,7 +596,7 @@ async def websocket_chat(websocket: WebSocket):
                         break
                     # Agent 执行期间收到 WS 消息：仅处理确认类，其余忽略
                     msg2 = json.loads(ws_task.result())
-                    if msg2.get("type") in ("confirm_response", "plan_confirm_response"):
+                    if msg2.get("type") in ("confirm_response", "plan_confirm_response", "step_review_response"):
                         _handle_confirm_msg(msg2, confirm_events, plan_confirm_events)
                     elif msg2.get("type") == "stop":
                         logger.info("[WS] 用户请求停止 Agent user=%s", user_id)
