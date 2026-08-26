@@ -342,7 +342,7 @@ class McpAgent:
         user_input: str,
         user_id: int,
         history: list[dict] | None,
-        on_event: Callable[[dict], None] | None,
+        on_event: Callable[[dict], None],
         plan: list[dict],
     ) -> str:
         """ReAct + Reflection 执行器：
@@ -350,6 +350,8 @@ class McpAgent:
         2. 失败自动重试一次（换角度）
         3. 全部完成后自我审查一致性（Reflection）
         4. 发现问题回溯重做
+
+        计划已经用户批准 → 每个子任务的工具预算翻倍（重活如做PPT需要大量读写+安装）
         """
         _emit(on_event, {
             "type": "plan", "steps": [p["name"] for p in plan],
@@ -372,7 +374,10 @@ class McpAgent:
             r = None
             for attempt in range(max_retry + 1):
                 try:
-                    r = await self._arun_single(step_input, user_id, history, None, emit_answer=False)
+                    # 计划已批准 → 子任务工具预算翻倍（重活如做PPT需大量读文件+安装+执行）
+                    r = await self._arun_single(step_input, user_id, history, None,
+                                                emit_answer=False,
+                                                step_budget=self.max_steps * 2)
                 except Exception as e:
                     r = f"子任务执行出错: {e}"
 
@@ -464,7 +469,9 @@ class McpAgent:
         history: list[dict] | None,
         on_event: Callable[[dict], None] | None,
         emit_answer: bool = True,
+        step_budget: int | None = None,
     ) -> str:
+        max_steps = step_budget or self.max_steps   # 规划模式可传入更高预算
         llm = _create_llm()
 
         # 工具 = 本地注册工具（用户态/多模态）+ MCP 协议接入的外部服务工具
@@ -507,8 +514,8 @@ class McpAgent:
                                     seen_tool_ids.add(tid)
                                     on_tool_call(tc)
                                     # 手动轮数限制：一旦超出就推送兜底并返回
-                                    if len(seen_tool_ids) > self.max_steps:
-                                        limit_text = f"已达到工具调用上限（{self.max_steps} 轮），请简化请求。"
+                                    if len(seen_tool_ids) > max_steps:
+                                        limit_text = f"已达到工具调用上限（{max_steps} 轮），请简化请求。"
                                         parts.append(limit_text)
                                         _stream_answer(on_event, limit_text)
                                         return "".join(parts)

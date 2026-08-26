@@ -220,9 +220,9 @@ function closeSkills() {
 }
 function selectSkill(s) {
   showSkills.value = false
-  // 选择技能：直接走 Agent 单步执行（load_skill → 按 SKILL.md 操作），不走规划、不弹规划确认
+  // 选择技能：前缀标记走 Agent 执行（load_skill → 按 SKILL.md 操作）
+  // 不再强制关闭规划：保留用户的规划开关，重任务（如做PPT）可先出计划经确认再执行
   useAgent.value = true
-  usePlanning.value = false
   const prefix = `[技能 ${s.name}] `
   input.value = input.value ? prefix + input.value : prefix
   nextTick(() => { document.querySelector('.chat-input')?.focus() })
