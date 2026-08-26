@@ -1,0 +1,148 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0" id="pIV">
+  <style />
+  <data>
+    <shape width="600" height="44" topLeftX="80" topLeftY="44" type="text" id="bJz">
+      <content textType="title" fontSize="30" fontFamily="思源宋体" color="rgba(42, 45, 48, 1)" bold="true" letterSpacing="1">
+        <p>项目总结与未来展望</p>
+      </content>
+    </shape>
+    <line id="bJq" startX="80" startY="100" endX="880" endY="100">
+      <border color="rgba(204, 209, 204, 1)" width="1" />
+    </line>
+    <shape width="300" height="26" topLeftX="80" topLeftY="120" type="text" id="bJg">
+      <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true" letterSpacing="1" wrap="false">
+        <p>项目总结 · SUMMARY</p>
+      </content>
+    </shape>
+    <shape width="52" height="40" topLeftX="80" topLeftY="158" type="text" id="bJZ">
+      <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+        <p>01</p>
+      </content>
+    </shape>
+    <shape width="300" height="32" topLeftX="148" topLeftY="160" type="text" id="bJd">
+      <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+        <p>自然语言驱动自动化</p>
+      </content>
+    </shape>
+    <shape width="300" height="60" topLeftX="148" topLeftY="196" type="text" id="bJW">
+      <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+        <p>用户通过对话完成复杂任务，Agent 自主编排 24 种工具（见第 3 章）</p>
+      </content>
+    </shape>
+    <line id="bJD" startX="80" startY="262" endX="400" endY="262">
+      <border color="rgba(226, 229, 225, 1)" width="1" />
+    </line>
+    <shape width="52" height="40" topLeftX="80" topLeftY="274" type="text" id="bJE">
+      <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+        <p>02</p>
+      </content>
+    </shape>
+    <shape width="300" height="32" topLeftX="148" topLeftY="276" type="text" id="bJb">
+      <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+        <p>安全可控的 AI 执行</p>
+      </content>
+    </shape>
+    <shape width="300" height="60" topLeftX="148" topLeftY="312" type="text" id="bJG">
+      <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+        <p>四层纵深防御、成本熔断与过程可视化，保障可控可用（见第 4 章）</p>
+      </content>
+    </shape>
+    <line id="bJA" startX="80" startY="378" endX="400" endY="378">
+      <border color="rgba(226, 229, 225, 1)" width="1" />
+    </line>
+    <shape width="52" height="40" topLeftX="80" topLeftY="390" type="text" id="bJn">
+      <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+        <p>03</p>
+      </content>
+    </shape>
+    <shape width="300" height="32" topLeftX="148" topLeftY="392" type="text" id="bJI">
+      <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+        <p>系统化质量保障</p>
+      </content>
+    </shape>
+    <shape width="300" height="60" topLeftX="148" topLeftY="428" type="text" id="bJw">
+      <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+        <p>17 个测试文件、115 个用例，核心模块全覆盖（见第 5 章）</p>
+      </content>
+    </shape>
+    <line id="bJi" startX="470" startY="120" endX="470" endY="492">
+      <border color="rgba(204, 209, 204, 1)" width="1" />
+    </line>
+    <shape width="300" height="26" topLeftX="510" topLeftY="120" type="text" id="bJF">
+      <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true" letterSpacing="1" wrap="false">
+        <p>未来展望 · OUTLOOK</p>
+      </content>
+    </shape>
+    <shape width="52" height="40" topLeftX="510" topLeftY="158" type="text" id="bJl">
+      <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+        <p>01</p>
+      </content>
+    </shape>
+    <shape width="300" height="32" topLeftX="578" topLeftY="160" type="text" id="bJQ">
+      <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+        <p>能力扩展</p>
+      </content>
+    </shape>
+    <shape width="300" height="60" topLeftX="578" topLeftY="196" type="text" id="bJk">
+      <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+        <p>扩展更多工具与多模态能力，覆盖更丰富业务场景</p>
+      </content>
+    </shape>
+    <line id="bJJ" startX="510" startY="262" endX="880" endY="262">
+      <border color="rgba(226, 229, 225, 1)" width="1" />
+    </line>
+    <shape width="52" height="40" topLeftX="510" topLeftY="274" type="text" id="bJp">
+      <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+        <p>02</p>
+      </content>
+    </shape>
+    <shape width="300" height="32" topLeftX="578" topLeftY="276" type="text" id="bJh">
+      <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+        <p>智能进化</p>
+      </content>
+    </shape>
+    <shape width="300" height="60" topLeftX="578" topLeftY="312" type="text" id="bJO">
+      <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+        <p>引入人机协同反馈，持续优化规划与自检策略</p>
+      </content>
+    </shape>
+    <line id="bJL" startX="510" startY="378" endX="880" endY="378">
+      <border color="rgba(226, 229, 225, 1)" width="1" />
+    </line>
+    <shape width="52" height="40" topLeftX="510" topLeftY="390" type="text" id="bJV">
+      <content fontSize="22" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true">
+        <p>03</p>
+      </content>
+    </shape>
+    <shape width="300" height="32" topLeftX="578" topLeftY="392" type="text" id="bJr">
+      <content fontSize="17" fontFamily="思源黑体" color="rgba(42, 45, 48, 1)" bold="true">
+        <p>规模部署</p>
+      </content>
+    </shape>
+    <shape width="300" height="60" topLeftX="578" topLeftY="428" type="text" id="bJc">
+      <content fontSize="13" fontFamily="思源黑体" color="rgba(110, 120, 112, 1)" lineSpacing="multiple:1.4">
+        <p>支持私有化部署与多租户 SaaS 化，提升可推广性</p>
+      </content>
+    </shape>
+    <shape width="520" height="22" topLeftX="220" topLeftY="492" type="text" id="newclose">
+      <content fontSize="14" fontFamily="思源黑体" color="rgba(76, 122, 90, 1)" bold="true" textAlign="center" letterSpacing="1">
+        <p>感谢聆听 · 欢迎各位评委老师批评指正</p>
+      </content>
+    </shape>
+    <line id="bJe" startX="80" startY="514" endX="880" endY="514">
+      <border color="rgba(226, 229, 225, 1)" width="1" />
+    </line>
+    <shape width="60" height="20" topLeftX="820" topLeftY="518" type="text" id="bJa">
+      <content fontSize="11" fontFamily="思源黑体" color="rgba(150, 158, 151, 1)" textAlign="right">
+        <p>13</p>
+      </content>
+    </shape>
+  </data>
+  <note id="bJM">
+    <content>
+      <p>最后做项目总结。我们实现了三方面目标：第一，自然语言驱动自动化，Agent 自主编排 24 种工具完成复杂任务；第二，安全可控的 AI 执行环境，四层纵深防御加成本熔断与过程可视化；第三，系统化的质量保障，17 个测试文件、115 个用例覆盖核心模块。</p>
+      <p>未来展望方面，我们将扩展更多工具与多模态能力，引入人机协同反馈优化 Agent 策略，并支持私有化部署与多租户 SaaS 化。</p>
+      <p>感谢各位评委老师，欢迎提问指正。</p>
+    </content>
+  </note>
+</slide>

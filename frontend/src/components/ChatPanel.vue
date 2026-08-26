@@ -401,6 +401,9 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
           <div class="empty-hint">普通模式自由对话 · Agent 模式 AI 自主调用 24 种工具<br/>点击 + 上传图片、音频、文档</div>
         </div>
         <div v-for="(msg, i) in messages" :key="i" :class="['msg-row', 'msg-' + msg.role]">
+          <!-- 头像：用户=首字母徽标（与左下角一致），AI=品牌菱形 -->
+          <div v-if="msg.role === 'user'" class="msg-avatar user-avatar">{{ (userStore.username || 'U').charAt(0).toUpperCase() }}</div>
+          <div v-else class="msg-avatar ai-avatar">◆</div>
           <!-- 计划卡片（第一档 Plan Mode） -->
           <div v-if="msg.kind === 'plan'" class="msg-bubble plan-bubble">
             <pre class="plan-md">{{ msg.content }}</pre>
@@ -565,7 +568,23 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .chat-empty { text-align: center; padding: 64px 16px; color: var(--slate); }
 .empty-title { font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
 .empty-hint { font-size: 12px; line-height: 1.8; color: var(--slate); }
-.msg-row { display: flex; }
+.msg-row { display: flex; align-items: flex-start; gap: 10px; }
+.msg-user { justify-content: flex-end; }
+.msg-user .msg-avatar { order: 2; }          /* 用户头像在气泡右侧（外缘） */
+
+/* 头像 */
+.msg-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px;
+}
+.user-avatar {
+  background: var(--cobalt); color: #fff;                    /* 与侧栏用户徽标一致 */
+}
+.ai-avatar {
+  background: var(--ink); color: var(--cobalt-lift, #7B93FF); /* 深墨底 + 品牌菱形 */
+  border: 1px solid var(--border);
+}
 .msg-user { justify-content: flex-end; }
 .msg-bubble { max-width: 78%; padding: 10px 16px; border-radius: var(--radius-md); font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 .msg-user .msg-bubble { background: var(--cobalt); color: #fff; border-bottom-right-radius: 4px; }

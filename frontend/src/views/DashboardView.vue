@@ -120,7 +120,7 @@ const tools = [
 </template>
 
 <style scoped>
-.dashboard { max-width: 1000px; }
+.dashboard { width: 100%; }
 
 /* ========== 快捷入口 ========== */
 .quick-row { display: flex; gap: 16px; margin-bottom: 28px; }
@@ -132,21 +132,21 @@ const tools = [
 }
 .quick-card:hover { border-color: var(--cobalt); box-shadow: 0 2px 12px rgba(61,91,245,0.14); transform: translateY(-2px); }
 .qc-icon { font-size: 28px; color: var(--cobalt); }
-.qc-label { font-size: 15px; font-weight: 700; color: var(--ink); }
-.qc-desc { font-size: 11px; color: var(--slate); }
+.qc-label { font-size: 16px; font-weight: 700; color: var(--ink); }
+.qc-desc { font-size: 12.5px; color: var(--slate); }
 
 /* ========== 工具分组 ========== */
 .tool-groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-.tool-group { padding: 18px 20px; }
-.group-title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); letter-spacing: 0.06em; }
-.tool-list { display: flex; flex-direction: column; gap: 10px; }
+.tool-group { padding: 18px 22px; }
+.group-title { font-size: 14.5px; font-weight: 700; color: var(--ink); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); letter-spacing: 0.06em; }
+.tool-list { display: flex; flex-direction: column; gap: 12px; }
 .tool-item { display: flex; align-items: baseline; gap: 10px; }
 .tool-name {
   font-family: var(--font-mono);
-  font-size: 12px; font-weight: 600; color: var(--cobalt);
-  white-space: nowrap; min-width: 78px; flex-shrink: 0;
+  font-size: 13px; font-weight: 600; color: var(--cobalt);
+  white-space: nowrap; min-width: 96px; flex-shrink: 0;
 }
-.tool-desc { font-size: 12px; color: var(--slate); line-height: 1.5; }
+.tool-desc { font-size: 13px; color: var(--slate); line-height: 1.6; }
 
 @media (max-width: 720px) {
   .tool-groups { grid-template-columns: 1fr; }

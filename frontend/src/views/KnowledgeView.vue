@@ -208,7 +208,7 @@ onMounted(fetchList)
 </template>
 
 <style scoped>
-.knowledge-page { max-width: 1100px; }
+.knowledge-page { width: 100%; }
 .kb-layout { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
 .section-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 14px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }

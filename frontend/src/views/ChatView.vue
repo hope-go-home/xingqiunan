@@ -14,6 +14,7 @@ import ChatPanel from '../components/ChatPanel.vue'
 </template>
 
 <style scoped>
-.chat-page { max-width: 900px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* 占满主内容区宽度（不再限宽靠左），仅保留左右留白 */
+.chat-page { width: 100%; flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .page-header { flex-shrink: 0; }
 </style>
