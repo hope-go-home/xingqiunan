@@ -246,6 +246,7 @@ def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: di
         if cid in plan_confirm_events:
             evt, box = plan_confirm_events[cid]
             box["allowed"] = bool(msg.get("allow"))
+            box["auto_allow"] = bool(msg.get("auto_allow"))   # 用户勾选"自动允许本计划内后续操作"
             evt.set()
 
 
@@ -382,6 +383,9 @@ async def websocket_chat(websocket: WebSocket):
 
     def make_confirm_handler():
         def handler(command: str, user_id: int, prompt: str) -> bool:
+            # 规划确认时勾选了"自动允许本计划内操作" → 本次执行期间免询问
+            if plan_auto_allow["flag"]:
+                return True
             # session 级权限：用户勾选"本次会话不再询问"后，同类命令自动放行
             if command in allowed_commands.get(user_id, set()):
                 return True
@@ -414,12 +418,13 @@ async def websocket_chat(websocket: WebSocket):
     # 长程规划确认机制：规划器生成计划后推送前端，用户确认才执行
     from app.agents import mcp_agent as mcp_agent_mod
     plan_confirm_events: dict[str, tuple] = {}
+    plan_auto_allow = {"flag": False}   # 用户勾选"自动允许本计划内操作"后，本次执行期间高危操作免询问
 
     def make_plan_confirm_handler():
         def handler(user_input: str, plan: list[dict]) -> bool:
             cid = uuid.uuid4().hex[:12]
             evt = asyncio.Event()
-            box = {"allowed": False}
+            box = {"allowed": False, "auto_allow": False}
             plan_confirm_events[cid] = (evt, box)
             try:
                 _await_future(asyncio.run_coroutine_threadsafe(
@@ -429,6 +434,7 @@ async def websocket_chat(websocket: WebSocket):
                         "steps": [{"name": p["name"], "action": p["action"]} for p in plan],
                     }), loop), 5)
                 _await_future(asyncio.run_coroutine_threadsafe(evt.wait(), loop), 180)
+                plan_auto_allow["flag"] = bool(box.get("auto_allow"))   # 本次执行期间生效
                 return box["allowed"]
             except Exception:
                 return False
@@ -547,7 +553,9 @@ async def websocket_chat(websocket: WebSocket):
                             (reply, used_web_search, in_tokens, out_tokens, tool_names) = agent_task.result()
                         except asyncio.CancelledError:
                             # 用户点击"停止"取消了 Agent 任务
+                            plan_auto_allow["flag"] = False   # 本次计划结束，授权收回
                             break
+                        plan_auto_allow["flag"] = False       # 本次计划结束，授权收回
                         logger.info("[WS] Agent 回复完成 user=%s 工具调用=%s 回复长度=%s",
                                     user_id, tool_names, len(reply))
                         break
@@ -566,6 +574,7 @@ async def websocket_chat(websocket: WebSocket):
                         except Exception:
                             pass
                         await manager.send_json(user_id, {"type": "agent_stopped"})
+                        plan_auto_allow["flag"] = False       # 本次计划结束，授权收回
                         break
                     else:
                         logger.info("[WS] Agent 执行中忽略非确认消息: %s", str(msg2)[:80])

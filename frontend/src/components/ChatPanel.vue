@@ -27,6 +27,7 @@ const currentSessionId = ref('')
 const pendingConfirm = ref(null)
 const allowForSession = ref(false)
 const pendingPlan = ref(null)
+const planAutoAllow = ref(false)
 const showSkills = ref(false)
 const skills = ref([])
 const loadingSkills = ref(false)
@@ -235,8 +236,14 @@ function respondConfirm(allow) {
 }
 function respondPlan(allow) {
   if (!pendingPlan.value) return
-  getClient().send({ type: 'plan_confirm_response', id: pendingPlan.value.id, allow })
+  getClient().send({
+    type: 'plan_confirm_response',
+    id: pendingPlan.value.id,
+    allow,
+    auto_allow: allow && planAutoAllow.value,
+  })
   pendingPlan.value = null
+  planAutoAllow.value = false
 }
 
 function onClickOutside(e) { if (!e.target.closest('.plus-area')) showMenu.value = false }
@@ -334,6 +341,10 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
               </div>
             </div>
           </div>
+          <label class="confirm-checkbox">
+            <input type="checkbox" v-model="planAutoAllow" />
+            <span>自动允许本计划内的后续操作（执行中不再逐个询问）</span>
+          </label>
           <div class="confirm-actions">
             <button class="btn btn-ghost confirm-btn" @click="respondPlan(false)">取消</button>
             <button class="btn btn-primary confirm-btn" @click="respondPlan(true)">开始执行</button>
