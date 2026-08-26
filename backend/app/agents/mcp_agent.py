@@ -390,7 +390,8 @@ class McpAgent:
             results.append(f"【第 {i} 步：{step['name']}】\n{r}")
 
         # ─── Reflection：自我审查一致性 ───
-        reflection = await self._reflect_sync(user_input, results)
+        # _reflect_sync 是同步方法（内部有阻塞网络调用），必须丢线程，不能直接 await
+        reflection = await asyncio.to_thread(self._reflect_sync, user_input, results)
         if reflection.get("issues"):
             logger.info("[Reflection] 发现 %d 个问题，回溯重做", len(reflection["issues"]))
             _emit(on_event, {"type": "reflection", "issues": reflection["issues"]})

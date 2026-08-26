@@ -361,7 +361,7 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
       <div ref="chatEl" class="chat-messages">
         <div v-if="messages.length === 0" class="chat-empty">
           <div class="empty-title">TaskBench AI</div>
-          <div class="empty-hint">普通模式自由对话 · Agent 模式 AI 自主调用 12 种工具<br/>点击 + 上传图片、音频、文档</div>
+          <div class="empty-hint">普通模式自由对话 · Agent 模式 AI 自主调用 24 种工具<br/>点击 + 上传图片、音频、文档</div>
         </div>
         <div v-for="(msg, i) in messages" :key="i" :class="['msg-row', 'msg-' + msg.role]">
           <div class="msg-bubble">

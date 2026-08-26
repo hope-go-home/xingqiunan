@@ -9,6 +9,7 @@ import re
 import shutil
 import shlex
 import subprocess
+import threading
 import time
 
 from app.core.config import WORKSPACE_DIR
@@ -246,6 +247,83 @@ def _move(user_id: int, src_path: str, dst_path: str) -> str:
         os.makedirs(parent, exist_ok=True)
     shutil.move(src, dst)
     return f"已移动: {src_path} → {dst_path}"
+
+
+# ─── 外部目录读取授权（用户决定 Agent 能否读取工作区外的文件）───
+# 用户确认一次 → 授权该文件所在目录（本会话内有效，断开即清空）
+
+# 可读取的外部文件类型（代码/文本/文档）
+_EXTERNAL_READ_EXTS = {
+    ".txt", ".md", ".py", ".js", ".ts", ".vue", ".jsx", ".tsx", ".html", ".css",
+    ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".csv", ".xml", ".log",
+    ".pdf", ".docx", ".sql", ".sh", ".bat", ".env.example",
+}
+_EXTERNAL_MAX_SIZE = 2 * 1024 * 1024  # 单文件 2MB 上限
+
+_ext_dir_lock = threading.Lock()
+# user_id -> 已授权目录集合（realpath 规范化）
+_user_authorized_dirs: dict[int, set[str]] = {}
+
+
+def clear_ext_dirs(user_id: int) -> None:
+    """WS 断开时调用：清除该用户的全部外部目录授权"""
+    with _ext_dir_lock:
+        _user_authorized_dirs.pop(user_id, None)
+
+
+def _dir_authorized(user_id: int, directory: str) -> bool:
+    with _ext_dir_lock:
+        dirs = _user_authorized_dirs.get(user_id, set())
+        return any(directory == d or directory.startswith(d.rstrip("\\/") + "\\")
+                   or directory.startswith(d.rstrip("\\/") + "/")
+                   for d in dirs)
+
+
+def _authorize_dir(user_id: int, directory: str) -> None:
+    with _ext_dir_lock:
+        _user_authorized_dirs.setdefault(user_id, set()).add(directory)
+
+
+def _read_external_file(user_id: int, raw_path: str) -> str:
+    """读取工作区外的文本/代码/文档文件。
+
+    权限模型：首次访问某个目录 → 经人工确认 → 授权该目录（本会话有效）。
+    拒绝或无确认通道 → 拒绝读取。
+    """
+    if not raw_path or not isinstance(raw_path, str):
+        raise ValueError("路径不能为空")
+
+    full = os.path.realpath(raw_path)
+    if not os.path.isfile(full):
+        raise FileNotFoundError(f"文件不存在: {raw_path}")
+
+    ext = ("." + full.rsplit(".", 1)[-1].lower()) if "." in full else ""
+    if ext not in _EXTERNAL_READ_EXTS:
+        raise ValueError(f"仅支持文本/代码/文档类型，不支持: {ext or '未知'}")
+    if os.path.getsize(full) > _EXTERNAL_MAX_SIZE:
+        raise ValueError(f"文件超过 {_EXTERNAL_MAX_SIZE // 1024 // 1024}MB 限制")
+
+    directory = os.path.dirname(full)
+    first_time = not _dir_authorized(user_id, directory)
+    if first_time:
+        # 需要用户授权：走人工确认回调
+        if _confirm_handler is None:
+            raise PermissionError("读取工作区外文件需要用户确认，但当前连接没有确认通道")
+        display_dir = os.path.basename(directory) or directory
+        allowed = _confirm_handler(
+            f"read_external {full}", user_id,
+            f"Agent 请求读取工作区外的文件：\n{full}\n\n"
+            f"允许后将授权整个目录「{display_dir}」的读取权限（本次会话内有效），是否允许？",
+        )
+        if not allowed:
+            raise PermissionError("用户未授权读取该目录")
+        _authorize_dir(user_id, directory)
+
+    size = os.path.getsize(full)
+    with open(full, "r", encoding="utf-8", errors="ignore") as f:
+        text = f.read(_EXTERNAL_MAX_SIZE)
+    note = f"\n…（文件共 {size} 字节，已截断）" if len(text) >= _EXTERNAL_MAX_SIZE else ""
+    return DATA_BEGIN + text + note + DATA_END
 
 
 def _run_command(user_id: int, command: str) -> str:

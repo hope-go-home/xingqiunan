@@ -149,3 +149,74 @@ def test_needs_confirmation_detects_dangerous():
     assert fs_tools._needs_confirmation("git push --force origin main")
     assert not fs_tools._needs_confirmation(f"{PY_CMD} ok.py")
     assert not fs_tools._needs_confirmation("echo hi")
+# ─── 外部目录读取授权：用户决定 Agent 能否读工作区外的文件 ───
+
+def test_read_external_denied_without_confirm(tmp_path, monkeypatch):
+    """无确认通道 → 拒绝读取外部文件"""
+    f = tmp_path / "outside.py"
+    f.write_text("print('hello')", encoding="utf-8")
+    monkeypatch.setattr(fs_tools, "_confirm_handler", None)
+    with pytest.raises(PermissionError):
+        fs_tools._read_external_file(9, str(f))
+
+
+def test_read_external_user_rejects(tmp_path, monkeypatch):
+    """用户拒绝 → 拒绝读取，且不产生授权"""
+    f = tmp_path / "secret_code.py"
+    f.write_text("x = 1", encoding="utf-8")
+    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: False)
+    with pytest.raises(PermissionError):
+        fs_tools._read_external_file(9, str(f))
+    assert not fs_tools._dir_authorized(9, str(tmp_path))
+
+
+def test_read_external_authorized_once(tmp_path, monkeypatch):
+    """用户允许一次 → 授权整个目录，后续同目录文件不再询问"""
+    f1 = tmp_path / "a.py"
+    f2 = tmp_path / "sub"
+    f2.mkdir()
+    f3 = f2 / "b.md"
+    f1.write_text("a = 1", encoding="utf-8")
+    f3.write_text("# b", encoding="utf-8")
+
+    calls = []
+    def fake_confirm(cmd, uid, prompt):
+        calls.append(prompt)
+        return True
+    monkeypatch.setattr(fs_tools, "_confirm_handler", fake_confirm)
+
+    out = fs_tools._read_external_file(9, str(f1))
+    assert "a = 1" in out and len(calls) == 1          # 首次询问
+
+    out2 = fs_tools._read_external_file(9, str(f3))
+    assert "# b" in out2 and len(calls) == 1          # 子目录同根，不再询问
+
+
+def test_read_ext_dirs_cleared_on_disconnect(tmp_path, monkeypatch):
+    """断开连接 → 授权清空，下次需重新确认"""
+    f = tmp_path / "x.py"
+    f.write_text("x = 2", encoding="utf-8")
+    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: True)
+    fs_tools._read_external_file(11, str(f))
+    assert fs_tools._dir_authorized(11, str(tmp_path))
+
+    fs_tools.clear_ext_dirs(11)
+    assert not fs_tools._dir_authorized(11, str(tmp_path))
+
+
+def test_read_external_unsupported_type(tmp_path):
+    """二进制类型直接拒绝（不走确认）"""
+    f = tmp_path / "virus.exe"
+    f.write_bytes(b"MZ...")
+    with pytest.raises(ValueError):
+        fs_tools._read_external_file(12, str(f))
+
+
+def test_read_external_sensitive_still_blocked(tmp_path, monkeypatch):
+    """.env 等敏感文件即使在已授权目录也拒绝"""
+    f = tmp_path / ".env.production"
+    f.write_text("SECRET=1", encoding="utf-8")
+    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: True)
+    fs_tools._authorize_dir(13, str(tmp_path))         # 预先授权目录
+    with pytest.raises(ValueError):
+        fs_tools._read_external_file(13, str(f))

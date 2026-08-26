@@ -727,6 +727,17 @@ def build_tools(user_id: int) -> list:
 
     @tool
     @_audited(user_id)
+    def read_project_file(file_path: str) -> str:
+        """读取本机任意位置的文本/代码/文档文件（.py/.md/.vue/.js/.txt/.pdf/.docx 等），
+        用于分析用户指定的项目。首次访问某个目录需用户在对话中确认授权。
+        参数 file_path 为文件的完整绝对路径（如 D:\\projects\\demo\\main.py）"""
+        try:
+            return _truncate(fs_tools._read_external_file(user_id, file_path))
+        except Exception as e:
+            return f"读取失败: {e}"
+
+    @tool
+    @_audited(user_id)
     def install_skill(skill_name: str) -> str:
         """从官方技能仓库（anthropics/skills，含 pptx/docx/pdf/xlsx 等）下载安装技能到本地 skills/ 目录。参数 skill_name（技能名，如 'pptx'）"""
         try:
@@ -760,5 +771,6 @@ def build_tools(user_id: int) -> list:
         web_search,
         write_file, read_file, list_workspace, create_directory,
         delete_file, move_file, run_command,
+        read_project_file,
         install_skill, list_skills, load_skill,
     ]

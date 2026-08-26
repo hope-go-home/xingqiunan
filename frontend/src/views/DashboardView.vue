@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-/** 23 项 Agent 工具（21 本地注册 + 2 MCP 协议） */
+/** 24 项 Agent 工具（22 本地注册 + 2 MCP 协议） */
 const tools = [
   {
     group: '文档',
@@ -58,6 +58,7 @@ const tools = [
       { name: 'delete_file',           label: '删除文件',   desc: '删除工作区内文件或空目录，高危操作需人工确认' },
       { name: 'move_file',             label: '移动/重命名', desc: '移动或重命名工作区内文件，高危操作需人工确认' },
       { name: 'run_command',           label: '执行命令',   desc: '在授权工作区内执行白名单命令（python/pip/git/node/npm 等），需人工确认' },
+      { name: 'read_project_file',     label: '读取项目文件', desc: '读取本机任意位置的代码/文档文件（用于分析你的项目），首次访问某目录需你确认授权' },
     ],
   },
   {
@@ -89,7 +90,7 @@ const tools = [
       <button class="quick-card" @click="router.push('/chat')">
         <span class="qc-icon">◈</span>
         <span class="qc-label">AI 对话</span>
-        <span class="qc-desc">Agent 模式 · 23 项工具</span>
+        <span class="qc-desc">Agent 模式 · 24 项工具</span>
       </button>
       <button class="quick-card" @click="router.push('/knowledge')">
         <span class="qc-icon">▣</span>

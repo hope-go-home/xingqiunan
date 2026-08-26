@@ -249,6 +249,10 @@ def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: di
             evt.set()
 
 
+class _AgentStopped(Exception):
+    """用户点击停止 → on_event 回调抛出此异常，中断线程池里的 Agent 执行"""
+
+
 async def _exec_agent(
     user_id: str,
     user_input: str,
@@ -256,8 +260,11 @@ async def _exec_agent(
     user_id_int: int,
     ctx: list[dict] | None,
     use_planning: bool,
+    stop_flag: dict | None = None,
 ):
     """后台执行 Agent（线程池）：工具调用/token 事件经 run_coroutine_threadsafe 回推。
+    stop_flag: {"flag": bool}，用户点停止后置 True——注意 to_thread 的线程无法强杀，
+    只能靠回调里检查标志抛异常协作式终止，否则线程会继续跑完并继续推消息。
     返回 (reply, used_web_search, in_tokens, out_tokens, tool_names)
     """
     loop = asyncio.get_running_loop()
@@ -267,6 +274,8 @@ async def _exec_agent(
 
     def on_event(evt: dict):
         nonlocal cost_running
+        if stop_flag and stop_flag.get("flag"):
+            raise _AgentStopped()          # 用户已停止：中断执行且不再推送任何事件
         if evt.get("type") == "usage":
             usage_box.update(evt)
             # 成本熔断：实时累计费用，超预算立即终止本次执行
@@ -515,8 +524,10 @@ async def websocket_chat(websocket: WebSocket):
                 # Agent 模式：后台任务执行（不阻塞事件循环），同时并发监听 WebSocket，
                 # 用户对高危命令/执行计划的确认响应能立即送达（此前主循环被 to_thread 阻塞，
                 # 确认响应积压导致每次都要干等 120 秒超时）
+                agent_stop = {"flag": False}     # 协作式停止标志：线程无法强杀，靠回调检查
                 agent_task = asyncio.create_task(
-                    _exec_agent(user_id, user_input, web_search, user_id, effective[:-1], use_planning)
+                    _exec_agent(user_id, user_input, web_search, user_id,
+                                effective[:-1], use_planning, agent_stop)
                 )
                 ws_task = asyncio.create_task(websocket.receive_text())
                 while True:
@@ -546,6 +557,7 @@ async def websocket_chat(websocket: WebSocket):
                         _handle_confirm_msg(msg2, confirm_events, plan_confirm_events)
                     elif msg2.get("type") == "stop":
                         logger.info("[WS] 用户请求停止 Agent user=%s", user_id)
+                        agent_stop["flag"] = True     # 先置标志：线程侧回调立即中断
                         agent_task.cancel()
                         try:
                             await agent_task
@@ -581,7 +593,9 @@ async def websocket_chat(websocket: WebSocket):
                 await db.commit()
 
     except WebSocketDisconnect:
+        fs_tools.clear_ext_dirs(int(user_id))   # 清除本会话的外部目录授权
         manager.disconnect(user_id)
     except Exception:
         logger.exception("WebSocket 处理异常，连接已关闭")
+        fs_tools.clear_ext_dirs(int(user_id))
         manager.disconnect(user_id)

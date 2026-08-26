@@ -44,14 +44,15 @@ def test_audit_failure_does_not_break(audit_dir, monkeypatch):
 
 
 def test_build_tools_registration_complete():
-    """工具注册表与定义一致：21 个，无死代码（query_weather 已移除）"""
+    """工具注册与定义一致，22 个本地工具（query_weather/time 走 MCP 不在内）"""
     names = {t.name for t in tools.build_tools(7)}
-    assert len(names) == 21
+    assert len(names) == 22
     expected = {
         "parse_document", "list_directory", "list_tasks", "translate", "create_task",
         "search_knowledge", "add_knowledge", "analyze_image", "ocr_image", "speech_to_text",
         "web_search", "write_file", "read_file", "list_workspace", "create_directory",
-        "delete_file", "move_file", "run_command", "install_skill", "list_skills", "load_skill",
+        "delete_file", "move_file", "run_command", "read_project_file",
+        "install_skill", "list_skills", "load_skill",
     }
     assert names == expected
 
