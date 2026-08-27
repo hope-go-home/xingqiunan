@@ -475,23 +475,6 @@ input, textarea, select { font-family: inherit; }
 }
 .btn-secondary:hover:not(:disabled) { background: var(--border); }
 
-/* ========== 状态标签 ========== */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: 99px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.status-pending   { background: var(--steel);             color: var(--slate); }
-.status-running   { background: var(--amber-bg);           color: var(--amber); }
-.status-completed { background: var(--verdant-bg);         color: var(--verdant); }
-.status-failed    { background: var(--crimson-bg);         color: var(--crimson); }
-
 /* ========== 脉冲点（运行态指示器） ========== */
 .pulse-dot {
   display: inline-block;

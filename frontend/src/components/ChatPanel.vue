@@ -276,7 +276,7 @@ function respondReview(redo) {
     feedback: reviewFeedback.value.trim(),
   })
   if (redo && reviewFeedback.value.trim()) {
-    toolLog.push(`🔄 按反馈重做：${pendingReview.value.step}（${reviewFeedback.value.trim().slice(0, 40)}）`)
+    toolLog.value.push(`🔄 按反馈重做：${pendingReview.value.step}（${reviewFeedback.value.trim().slice(0, 40)}）`)
   }
   pendingReview.value = null
   reviewFeedback.value = ''
@@ -539,21 +539,8 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .confirm-checkbox { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; font-size: 13px; color: var(--text-muted); cursor: pointer; }
 .confirm-checkbox input { width: 16px; height: 16px; accent-color: var(--crimson); cursor: pointer; }
 
-/* 规划确认弹窗：步骤列表 */
+/* 规划弹窗宽度（检查点审查复用） */
 .plan-modal { width: 520px; }
-.plan-steps { max-height: 280px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
-.plan-step {
-  display: flex; gap: 10px; padding: 10px 12px; background: var(--steel);
-  border-radius: var(--radius-sm); border-left: 3px solid var(--amber);
-}
-.plan-step-no {
-  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
-  background: var(--cobalt); color: #fff; font-size: 12px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-}
-.plan-step-body { flex: 1; min-width: 0; }
-.plan-step-name { font-size: 13px; font-weight: 700; color: var(--ink); }
-.plan-step-action { font-size: 12px; color: var(--slate); margin-top: 2px; line-height: 1.5; word-break: break-all; }
 
 /* 检查点审查 */
 .review-preview {
@@ -585,7 +572,6 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
   background: var(--ink); color: var(--cobalt-lift, #7B93FF); /* 深墨底 + 品牌菱形 */
   border: 1px solid var(--border);
 }
-.msg-user { justify-content: flex-end; }
 .msg-bubble { max-width: 78%; padding: 10px 16px; border-radius: var(--radius-md); font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 .msg-user .msg-bubble { background: var(--cobalt); color: #fff; border-bottom-right-radius: 4px; }
 .msg-assistant .msg-bubble { background: var(--steel); color: var(--ink); border-bottom-left-radius: 4px; }
@@ -653,7 +639,6 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .plus-area { position: relative; flex-shrink: 0; }
 .plus-btn { width: 42px; height: 42px; border-radius: var(--radius-sm); background: var(--steel); color: var(--slate); font-size: 22px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .plus-btn:hover { background: var(--border); color: var(--ink); }
-.plus-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .plus-menu { position: absolute; bottom: 50px; left: 0; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 4px 16px rgba(0,0,0,0.1); overflow: hidden; z-index: 10; min-width: 130px; }
 .plus-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; color: var(--ink); cursor: pointer; transition: background 0.1s; }
 .plus-item:hover { background: var(--steel); }

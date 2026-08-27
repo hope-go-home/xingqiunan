@@ -36,11 +36,6 @@ class ConnectionManager:
         """
         await self.send_json(client_id, {"type": "stream", "content": content, "done": done})
 
-    async def broadcast(self, data: dict[str, Any]):
-        """广播消息给所有连接的客户端"""
-        for ws in self.active_connections.values():
-            await ws.send_text(json.dumps(data, ensure_ascii=False))
-
 
 # 全局单例，所有地方用 manager 即可
 manager = ConnectionManager()

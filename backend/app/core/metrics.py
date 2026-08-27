@@ -52,32 +52,3 @@ tool_call_duration_seconds = Histogram(
     ["tool_name"],
     buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0],
 )
-
-# ─── 费用 ───
-
-cost_yuan_total = Counter(
-    "cost_yuan_total",
-    "累计费用（元）",
-    ["user_id"],
-)
-
-# ─── Agent 会话 ───
-
-agent_sessions_total = Counter(
-    "agent_sessions_total",
-    "Agent 会话总数",
-    ["status"],  # status: completed / error / timeout / cancelled
-)
-
-agent_session_duration_seconds = Histogram(
-    "agent_session_duration_seconds",
-    "Agent 会话耗时（秒）",
-    buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0],
-)
-
-# ─── 系统 ───
-
-active_websocket_connections = Gauge(
-    "active_websocket_connections",
-    "当前活跃 WebSocket 连接数",
-)

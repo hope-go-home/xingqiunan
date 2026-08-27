@@ -1,7 +1,6 @@
 # 安全模块：密码加密 + JWT 令牌生成与验证
 # 密钥/过期时间统一从 app.core.config 读取（.env 可配），不再硬编码
 
-import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -11,8 +10,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.config import SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
-
-logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
 

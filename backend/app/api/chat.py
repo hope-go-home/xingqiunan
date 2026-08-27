@@ -232,8 +232,9 @@ async def delete_session(
 
 # ─── WebSocket ───
 
-def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: dict) -> None:
-    """处理确认类消息（命令确认/规划确认），设置事件供线程侧回调等待"""
+def _handle_confirm_msg(msg: dict, confirm_events: dict, plan_confirm_events: dict,
+                        step_review_events: dict) -> None:
+    """处理确认类消息（命令确认/规划确认/检查点审查），设置事件供线程侧回调等待"""
     if msg.get("type") == "confirm_response":
         cid = str(msg.get("id", ""))
         if cid in confirm_events:
@@ -490,7 +491,7 @@ async def websocket_chat(websocket: WebSocket):
 
             # 高危命令人工确认响应：设置事件供 fs_tools 确认回调等待
             if msg.get("type") in ("confirm_response", "plan_confirm_response", "step_review_response"):
-                _handle_confirm_msg(msg, confirm_events, plan_confirm_events)
+                _handle_confirm_msg(msg, confirm_events, plan_confirm_events, step_review_events)
                 continue
 
             user_input = msg.get("message", "")
@@ -583,7 +584,8 @@ async def websocket_chat(websocket: WebSocket):
                         if ws_task in done:
                             try:
                                 _handle_confirm_msg(json.loads(ws_task.result()),
-                                                    confirm_events, plan_confirm_events)
+                                                    confirm_events, plan_confirm_events,
+                                                    step_review_events)
                             except Exception:
                                 pass
                         else:
@@ -601,7 +603,7 @@ async def websocket_chat(websocket: WebSocket):
                     # Agent 执行期间收到 WS 消息：仅处理确认类，其余忽略
                     msg2 = json.loads(ws_task.result())
                     if msg2.get("type") in ("confirm_response", "plan_confirm_response", "step_review_response"):
-                        _handle_confirm_msg(msg2, confirm_events, plan_confirm_events)
+                        _handle_confirm_msg(msg2, confirm_events, plan_confirm_events, step_review_events)
                     elif msg2.get("type") == "stop":
                         logger.info("[WS] 用户请求停止 Agent user=%s", user_id)
                         agent_stop["flag"] = True     # 先置标志：线程侧回调立即中断
