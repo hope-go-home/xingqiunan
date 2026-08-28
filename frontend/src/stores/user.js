@@ -1,7 +1,7 @@
 /**
  * stores/user.js — 用户状态管理（Pinia）。
  * 管理：登录 token、用户信息、登录/登出。
- * token 持久化到 localStorage。
+ * token 持久化到 sessionStorage（标签页隔离，支持多账号同时登录）。
  */
 
 import { defineStore } from 'pinia'
@@ -10,11 +10,11 @@ import * as authApi from '../api/auth'
 
 export const useUserStore = defineStore('user', () => {
   // ---- state ----
-  const token = ref(localStorage.getItem('token') || '')
+  const token = ref(sessionStorage.getItem('token') || '')
   const user = ref(null)
 
-  // 从 localStorage 恢复用户信息
-  const savedUser = localStorage.getItem('user')
+  // 从 sessionStorage 恢复用户信息
+  const savedUser = sessionStorage.getItem('user')
   if (savedUser) {
     try { user.value = JSON.parse(savedUser) } catch { /* 丢弃 */ }
   }
@@ -29,8 +29,8 @@ export const useUserStore = defineStore('user', () => {
     const res = await authApi.login(payload)
     token.value = res.access_token
     user.value = res.user
-    localStorage.setItem('token', res.access_token)
-    localStorage.setItem('user', JSON.stringify(res.user))
+    sessionStorage.setItem('token', res.access_token)
+    sessionStorage.setItem('user', JSON.stringify(res.user))
   }
 
   /** 注册 */
@@ -42,8 +42,8 @@ export const useUserStore = defineStore('user', () => {
   function logout() {
     token.value = ''
     user.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('user')
   }
 
   return { token, user, isLoggedIn, username, loginAction, registerAction, logout }
