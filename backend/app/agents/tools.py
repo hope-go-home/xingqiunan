@@ -33,6 +33,26 @@ MAX_TOOL_OUTPUT = 2000
 TASK_TYPES = ("document_process", "data_calc", "file_convert")
 TASK_STATUSES = ("pending", "running", "completed", "failed")
 
+# ─── 全局停止标志：Agent 执行中用户点停止，长耗时工具（音频/图片识别）响应中断 ───
+_stop_flags: dict[int, bool] = {}
+_stop_lock = threading.Lock()
+
+
+def set_stop_flag(user_id: int):
+    with _stop_lock:
+        _stop_flags[user_id] = True
+
+
+def clear_stop_flag(user_id: int):
+    with _stop_lock:
+        _stop_flags.pop(user_id, None)
+
+
+def is_stopped(user_id: int) -> bool:
+    with _stop_lock:
+        return _stop_flags.get(user_id, False)
+
+
 # ─── 结构化审计：每次工具调用落 JSONL（logs/audit/tool_calls.jsonl）───
 _audit_lock = threading.Lock()
 
@@ -410,11 +430,13 @@ def _web_search(query: str, top_k: int = 5) -> str:
 
 @resilient_call("dashscope")
 def _call_vision_api(model: str, messages: list) -> str:
-    """带重试+熔断的 DashScope 视觉 API 调用"""
+    """带重试+熔断的 DashScope 视觉 API 调用（加超时，避免单次调用无限等待）"""
     from openai import OpenAI
     client = OpenAI(
         api_key=DASHSCOPE_API_KEY,
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        timeout=60.0,
+        max_retries=1,
     )
     response = client.chat.completions.create(model=model, messages=messages)
     return response.choices[0].message.content
@@ -423,6 +445,9 @@ def _call_vision_api(model: str, messages: list) -> str:
 def _call_vision_model(user_id: int, image_path: str, prompt: str) -> str:
     """调用 qwen-vl-plus 视觉模型，支持公网 URL 或 uploads 内本地文件"""
     import base64
+
+    if is_stopped(user_id):
+        return "识别已停止（用户中断）"
 
     if image_path.startswith(("http://", "https://")):
         image_payload = {"url": image_path}
@@ -483,9 +508,9 @@ def _asr_submit_url(key: str, audio_url: str):
 
 @resilient_call("dashscope")
 def _asr_submit_file(key: str, file_obj):
-    """带重试+熔断的 ASR 提交（文件模式）"""
+    """带重试+熔断的 ASR 提交（文件模式，走录音文件识别端点）"""
     return requests.post(
-        "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription",
         headers={"Authorization": f"Bearer {key}"},
         data={"model": "paraformer-v1"},
         files={"file": file_obj},
@@ -531,6 +556,8 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
 
         task_id = task_data["output"]["task_id"]
         for _ in range(30):
+            if is_stopped(user_id):
+                return "识别已停止（用户中断）"
             poll_resp = _asr_poll(key, task_id)
             poll_data = poll_resp.json()
             status = poll_data.get("output", {}).get("task_status", "")

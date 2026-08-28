@@ -571,6 +571,8 @@ async def websocket_chat(websocket: WebSocket):
                 # 用户对高危命令/执行计划的确认响应能立即送达（此前主循环被 to_thread 阻塞，
                 # 确认响应积压导致每次都要干等 120 秒超时）
                 agent_stop = {"flag": False}     # 协作式停止标志：线程无法强杀，靠回调检查
+                from app.agents import tools as tools_mod
+                tools_mod.clear_stop_flag(int(user_id))   # 清除上次遗留的停止标志
                 agent_task = asyncio.create_task(
                     _exec_agent(user_id, user_input, web_search, user_id,
                                 effective[:-1], use_planning, agent_stop)
@@ -607,6 +609,8 @@ async def websocket_chat(websocket: WebSocket):
                     elif msg2.get("type") == "stop":
                         logger.info("[WS] 用户请求停止 Agent user=%s", user_id)
                         agent_stop["flag"] = True     # 先置标志：线程侧回调立即中断
+                        from app.agents import tools as tools_mod
+                        tools_mod.set_stop_flag(int(user_id))   # 长耗时工具（音/图识别）响应中断
                         agent_task.cancel()
                         try:
                             await agent_task
