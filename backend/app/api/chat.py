@@ -21,7 +21,7 @@ from langchain_openai import ChatOpenAI
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, REDIS_URL, ALLOWED_ORIGINS, REALTIME_ASR_MODEL
+from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, REDIS_URL, ALLOWED_ORIGINS, REALTIME_ASR_MODEL, WORKSPACE_ID
 from app.core.database import get_db, async_session
 from app.core.security import decode_access_token, get_current_user_id
 from app.core.cost_guard import CostLimitExceeded
@@ -683,11 +683,18 @@ async def websocket_asr(websocket: WebSocket):
     import websockets
     from app.core.config import REALTIME_ASR_MODEL
 
-    dashscope_ws_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+    # 构建 WebSocket URL：有 WorkspaceId 用专属域名，否则用默认
+    if WORKSPACE_ID:
+        dashscope_ws_url = f"wss://{WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference"
+    else:
+        dashscope_ws_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+
     dashscope_headers = {
         "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
         "user-agent": "TaskBench/1.0",
     }
+    if WORKSPACE_ID:
+        dashscope_headers["X-DashScope-WorkSpace"] = WORKSPACE_ID
 
     try:
         async with websockets.connect(dashscope_ws_url, extra_headers=dashscope_headers) as ds_ws:
