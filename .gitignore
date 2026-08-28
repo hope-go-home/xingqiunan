@@ -12,3 +12,6 @@ logs/
 backend/workspace/
 backend/uploads/
 backend/mcp_servers.json
+
+# Feishu slides cache
+.lark-slides/
