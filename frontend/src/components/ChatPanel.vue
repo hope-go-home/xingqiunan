@@ -1,6 +1,6 @@
 <!-- ChatPanel.vue — 聊天面板（DeepSeek 风格：左侧会话列表 + 右侧聊天区）-->
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ChatClient } from '../api/chat'
 import { useUserStore } from '../stores/user'
 import api from '../api/index'
@@ -10,9 +10,9 @@ const userStore = useUserStore()
 const messages = ref([])
 const toolLog = ref([])      // Agent 工具调用日志（独立于消息流，避免挤掉流式回答）
 const input = ref('')
-const useAgent = ref(false)
-const useWebSearch = ref(false)
-const usePlanning = ref(false)
+const useAgent = ref(sessionStorage.getItem('use_agent') === '1')
+const useWebSearch = ref(sessionStorage.getItem('use_web_search') === '1')
+const usePlanning = ref(sessionStorage.getItem('use_planning') === '1')
 const sidebarCollapsed = ref(false)
 const sending = ref(false)
 const webSearchUsed = ref(false)
@@ -23,7 +23,7 @@ const loadingHistory = ref(false)
 
 const connStatus = ref('idle')
 const connError = ref('')
-const currentSessionId = ref('')
+const currentSessionId = ref(sessionStorage.getItem('current_session') || '')
 const runningSessionId = ref(null)   // 正在执行 Agent 的会话（切走时后台继续，UI 不串台）
 const pendingConfirm = ref(null)
 const allowForSession = ref(false)
@@ -213,8 +213,7 @@ async function deleteSession(sid) {
 function newChat() {
   messages.value = []; toolLog.value = []; currentSessionId.value = ''; webSearchUsed.value = false
   loadSessions()
-}
-function stopReply() {
+}function stopReply() {
   // Agent 模式：发 stop 消息让后端取消 Agent 任务（否则断开 WS 后后台还在跑工具）
   if (useAgent.value && client?.ws?.readyState === WebSocket.OPEN) {
     client.send({ type: 'stop' })
@@ -296,7 +295,20 @@ function respondReview(redo) {
 
 function onClickOutside(e) { if (!e.target.closest('.plus-area')) showMenu.value = false }
 
-onMounted(() => { getClient(); loadSessions(); document.addEventListener('click', onClickOutside) })
+// 持久化：会话与模式开关，刷新后恢复
+watch([currentSessionId, useAgent, useWebSearch, usePlanning], () => {
+  sessionStorage.setItem('current_session', currentSessionId.value || '')
+  sessionStorage.setItem('use_agent', useAgent.value ? '1' : '0')
+  sessionStorage.setItem('use_web_search', useWebSearch.value ? '1' : '0')
+  sessionStorage.setItem('use_planning', usePlanning.value ? '1' : '0')
+})
+
+onMounted(() => {
+  getClient(); loadSessions()
+  // 刷新后恢复上次会话的历史
+  if (currentSessionId.value) selectSession(currentSessionId.value)
+  document.addEventListener('click', onClickOutside)
+})
 onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', onClickOutside) })
 </script>
 
