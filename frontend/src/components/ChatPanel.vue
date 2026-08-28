@@ -186,7 +186,6 @@ async function handleFileUpload(file, promptTemplate) {
   } catch (e) { uploading.value = ''; connError.value = '上传失败: ' + (e?.response?.data?.detail || e.message) }
 }
 function onPickImage(e) { handleFileUpload(e.target.files[0], '用 analyze_image 分析服务器文件: {path}，描述内容'); e.target.value = '' }
-function onPickAudio(e) { handleFileUpload(e.target.files[0], '用 speech_to_text 转写音频文件: {path}，把文字提取出来'); e.target.value = '' }
 function onPickDoc(e)   { handleFileUpload(e.target.files[0], '用 parse_document 解析文件: {path}，提取并总结内容'); e.target.value = '' }
 
 // 会话
@@ -268,7 +267,8 @@ async function toggleRecording() {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    audioContext = new AudioContext({ sampleRate: 16000 })
+    // 使用默认采样率（通常 44100 或 48000），稍后手动重采样到 16000
+    audioContext = new AudioContext()
     const source = audioContext.createMediaStreamSource(stream)
 
     // 连接到后端 ASR WebSocket
@@ -312,6 +312,8 @@ async function toggleRecording() {
     // 使用 ScriptProcessorNode 处理音频
     const bufferSize = 4096
     recorderProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1)
+    const inputSampleRate = audioContext.sampleRate // 通常是 44100 或 48000
+    const outputSampleRate = 16000
 
     recorderProcessor.onaudioprocess = (e) => {
       if (!isRecording.value || !asrWs || asrWs.readyState !== WebSocket.OPEN) return
@@ -319,10 +321,19 @@ async function toggleRecording() {
       // 获取 PCM 数据
       const inputData = e.inputBuffer.getChannelData(0)
 
+      // 重采样到 16000Hz
+      const ratio = inputSampleRate / outputSampleRate
+      const outputLength = Math.floor(inputData.length / ratio)
+      const resampled = new Float32Array(outputLength)
+      for (let i = 0; i < outputLength; i++) {
+        const index = Math.floor(i * ratio)
+        resampled[i] = inputData[index]
+      }
+
       // 转换为 16-bit PCM
-      const pcmData = new Int16Array(inputData.length)
-      for (let i = 0; i < inputData.length; i++) {
-        const s = Math.max(-1, Math.min(1, inputData[i]))
+      const pcmData = new Int16Array(resampled.length)
+      for (let i = 0; i < resampled.length; i++) {
+        const s = Math.max(-1, Math.min(1, resampled[i]))
         pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
       }
 
@@ -579,7 +590,6 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
           <button class="plus-btn" @click.stop="showMenu = !showMenu">+</button>
           <div v-if="showMenu" class="plus-menu">
             <label class="plus-item"><span class="plus-icon">◰</span>上传图片<input type="file" accept="image/*" hidden @change="onPickImage" /></label>
-            <label class="plus-item"><span class="plus-icon">◷</span>上传音频<input type="file" accept="audio/*" hidden @change="onPickAudio" /></label>
             <label class="plus-item"><span class="plus-icon">▣</span>上传文档<input type="file" accept=".pdf,.docx,.doc,.txt,.md,.json,.csv" hidden @change="onPickDoc" /></label>
           </div>
         </div>

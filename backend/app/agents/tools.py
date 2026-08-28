@@ -26,8 +26,6 @@ from app.core.config import (
     BOCHA_API_KEY,
     LOG_DIR,
     VISION_MODEL,
-    ASR_MODEL,
-    REALTIME_ASR_MODEL,
 )
 
 # 工具输出最大长度（字符），超出截断，防止工具结果撑爆上下文
@@ -498,96 +496,6 @@ def _ocr_image(user_id: int, image_path: str) -> str:
         return f"OCR 识别失败: {e}"
 
 
-@resilient_call("dashscope")
-def _asr_submit_url(key: str, audio_url: str):
-    """带重试+熔断的 ASR 提交（URL 模式）"""
-    return requests.post(
-        "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": ASR_MODEL, "input": {"file_urls": [audio_url]}},
-        timeout=30,
-    )
-
-
-@resilient_call("dashscope")
-def _asr_poll(key: str, task_id: str):
-    """带重试+熔断的 ASR 轮询"""
-    return requests.get(
-        f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}",
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=10,
-    )
-
-
-@resilient_call("dashscope")
-def _asr_transcribe_file(key: str, full: str):
-    """带重试+熔断的本地文件转写（OpenAI 兼容接口，同步返回文字）"""
-    from openai import OpenAI
-    client = OpenAI(
-        api_key=key,
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        timeout=120.0,
-        max_retries=1,
-    )
-    with open(full, "rb") as f:
-        resp = client.audio.transcriptions.create(model=ASR_MODEL, file=f)
-    return getattr(resp, "text", "") or ""
-
-
-def _speech_to_text(user_id: int, audio_input: str) -> str:
-    """语音转文字（DashScope Paraformer），支持公网 URL 或 uploads 内本地文件"""
-    key = DASHSCOPE_API_KEY
-    if not key:
-        return "未配置 DashScope API Key"
-
-    try:
-        is_url = audio_input.startswith(("http://", "https://"))
-
-        if is_url:
-            from app.agents.netguard import validate_public_url
-            ok, reason = validate_public_url(audio_input)
-            if not ok:
-                return f"URL 被安全策略拒绝（SSRF 防护）: {reason}"
-            submit_resp = _asr_submit_url(key, audio_input)
-            task_data = submit_resp.json()
-            if not task_data.get("output"):
-                return f"提交语音识别失败: {task_data}"
-            task_id = task_data["output"]["task_id"]
-            for _ in range(30):
-                if is_stopped(user_id):
-                    return "识别已停止（用户中断）"
-                poll_resp = _asr_poll(key, task_id)
-                poll_data = poll_resp.json()
-                status = poll_data.get("output", {}).get("task_status", "")
-
-                if status == "SUCCEEDED":
-                    results = poll_data["output"].get("results", [])
-                    texts = []
-                    for r in results:
-                        for sentence in r.get("sentences", []):
-                            texts.append(sentence.get("text", ""))
-                    full_text = "\n".join(texts)
-                    return full_text if full_text else "识别完成，但未提取到文字"
-
-                if status == "FAILED":
-                    return f"语音识别失败: {poll_data.get('output', {})}"
-
-                time.sleep(2)
-
-            return "语音识别超时，请稍后重试"
-        else:
-            # 本地文件：走 OpenAI 兼容接口，同步返回文字
-            full = _safe_path(user_id, audio_input)
-            if not os.path.exists(full):
-                return f"文件不存在: {audio_input}"
-            text = _asr_transcribe_file(key, full)
-            return text.strip() if text.strip() else "识别完成，但未提取到文字"
-    except requests.RequestException as e:
-        return f"网络请求失败: {e}"
-    except Exception as e:
-        return f"语音识别出错: {e}"
-
-
 # === 工具工厂：按用户绑定，注入 user_id，统一截断 ===
 
 def build_tools(user_id: int) -> list:
@@ -662,15 +570,6 @@ def build_tools(user_id: int) -> list:
             return _truncate(_ocr_image(user_id, image_path))
         except Exception as e:
             return f"OCR 识别失败: {e}"
-
-    @tool
-    @_audited(user_id)
-    def speech_to_text(audio_input: str) -> str:
-        """语音转文字（ASR），使用 Paraformer 模型。参数 audio_input（音频的公网 URL 或 uploads 目录内文件路径），返回识别出的文字内容"""
-        try:
-            return _truncate(_speech_to_text(user_id, audio_input))
-        except Exception as e:
-            return f"语音识别失败: {e}"
 
     @tool
     @_audited(user_id)
@@ -801,7 +700,7 @@ def build_tools(user_id: int) -> list:
         parse_document, list_directory, list_tasks,
         translate, create_task,
         search_knowledge, add_knowledge,
-        analyze_image, ocr_image, speech_to_text,
+        analyze_image, ocr_image,
         web_search,
         write_file, read_file, list_workspace, create_directory,
         delete_file, move_file, run_command,

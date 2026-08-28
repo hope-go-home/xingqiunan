@@ -64,4 +64,4 @@ def test_build_tools_moves_external_tools_to_mcp():
     names = {t.name for t in tools.build_tools(7)}
     assert "query_weather" not in names
     assert "get_current_time" not in names
-    assert "parse_document" in names and "speech_to_text" in names
+    assert "parse_document" in names
