@@ -421,7 +421,7 @@ async def websocket_chat(websocket: WebSocket):
                 confirm_events.pop(cid, None)
         return handler
 
-    fs_tools.set_confirm_handler(make_confirm_handler())
+    fs_tools.set_confirm_handler(make_confirm_handler(), user_id=user_id)
 
     # 长程规划确认机制：规划器生成计划后推送前端，用户确认才执行
     from app.agents import mcp_agent as mcp_agent_mod
@@ -454,7 +454,7 @@ async def websocket_chat(websocket: WebSocket):
                 plan_confirm_events.pop(cid, None)
         return handler
 
-    mcp_agent_mod.set_plan_confirm_handler(make_plan_confirm_handler())
+    mcp_agent_mod.set_plan_confirm_handler(make_plan_confirm_handler(), user_id=user_id)
 
     # 检查点审查机制：执行到 checkpoint 步骤暂停，产出推给用户审查（继续/带反馈重做）
     step_review_events: dict[str, tuple] = {}
@@ -482,7 +482,7 @@ async def websocket_chat(websocket: WebSocket):
                 step_review_events.pop(cid, None)
         return handler
 
-    mcp_agent_mod.set_step_review_handler(make_step_review_handler())
+    mcp_agent_mod.set_step_review_handler(make_step_review_handler(), user_id=user_id)
 
     try:
         while True:
@@ -643,9 +643,15 @@ async def websocket_chat(websocket: WebSocket):
                 await db.commit()
 
     except WebSocketDisconnect:
-        fs_tools.clear_ext_dirs(int(user_id))   # 清除本会话的外部目录授权
+        fs_tools.clear_ext_dirs(int(user_id))
+        fs_tools.remove_confirm_handler(int(user_id))
+        mcp_agent_mod.remove_plan_confirm_handler(int(user_id))
+        mcp_agent_mod.remove_step_review_handler(int(user_id))
         manager.disconnect(user_id)
     except Exception:
         logger.exception("WebSocket 处理异常，连接已关闭")
         fs_tools.clear_ext_dirs(int(user_id))
+        fs_tools.remove_confirm_handler(int(user_id))
+        mcp_agent_mod.remove_plan_confirm_handler(int(user_id))
+        mcp_agent_mod.remove_step_review_handler(int(user_id))
         manager.disconnect(user_id)

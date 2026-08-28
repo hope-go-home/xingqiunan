@@ -174,24 +174,38 @@ def _create_llm_fallback() -> ChatOpenAI | None:
     )
 
 
-# 规划确认回调（由 chat.py 在 WS 连接时注入；None 表示无确认通道，直接执行）
-_plan_confirm_handler: Callable[[str, list[dict]], bool] | None = None
+# 规划确认回调（由 chat.py 在 WS 连接时注入；按 user_id 隔离，支持多用户并发）
+_plan_confirm_handlers: dict[int, Callable] = {}
 
 
-def set_plan_confirm_handler(fn: Callable[[str, list[dict]], bool] | None):
-    """注入规划确认回调：fn(user_input, plan) -> bool，True=用户确认执行，False=取消"""
-    global _plan_confirm_handler
-    _plan_confirm_handler = fn
+def set_plan_confirm_handler(fn: Callable[[str, list[dict]], bool] | None, user_id=None):
+    """注入规划确认回调：fn(user_input, plan) -> bool，True=用户确认执行，False=取消。
+    user_id 不为 None 时按用户注册；为 None 时清除全部。"""
+    if user_id is not None:
+        _plan_confirm_handlers[user_id] = fn
+    else:
+        _plan_confirm_handlers.clear()
+
+
+def remove_plan_confirm_handler(user_id):
+    _plan_confirm_handlers.pop(user_id, None)
 
 
 # 检查点审查回调（chat.py 注入）：fn(step_name, result) -> {"action": "continue"|"redo", "feedback": str}
-_step_review_handler: Callable[[str, str], dict] | None = None
+_step_review_handlers: dict[int, Callable] = {}
 
 
-def set_step_review_handler(fn: Callable[[str, str], dict] | None):
-    """注入检查点审查回调：执行到 checkpoint 步骤时暂停，把产出交给用户审查"""
-    global _step_review_handler
-    _step_review_handler = fn
+def set_step_review_handler(fn: Callable[[str, str], dict] | None, user_id=None):
+    """注入检查点审查回调：执行到 checkpoint 步骤时暂停，把产出交给用户审查。
+    user_id 不为 None 时按用户注册；为 None 时清除全部。"""
+    if user_id is not None:
+        _step_review_handlers[user_id] = fn
+    else:
+        _step_review_handlers.clear()
+
+
+def remove_step_review_handler(user_id):
+    _step_review_handlers.pop(user_id, None)
 
 
 def _render_plan_markdown(user_input: str, plan: list[dict]) -> str:
@@ -352,10 +366,11 @@ class McpAgent:
                 plan = [{"name": "直接执行", "action": user_input[:500], "checkpoint": False}]
             if plan:
                 # 用户确认环节：展示计划，确认后才执行
-                if _plan_confirm_handler is not None:
+                plan_handler = _plan_confirm_handlers.get(user_id)
+                if plan_handler is not None:
                     try:
                         confirmed = await asyncio.to_thread(
-                            _plan_confirm_handler, user_input, plan
+                            plan_handler, user_input, plan
                         )
                     except Exception as e:
                         logger.warning("规划确认失败，按取消处理: %s", e)
@@ -427,9 +442,10 @@ class McpAgent:
             results.append(f"【第 {i} 步：{step['name']}】\n{r}")
 
             # ─── 检查点：关键交付物暂停，交用户审查（可带反馈重做）───
-            if step.get("checkpoint") and self._is_valid_result(r) and _step_review_handler:
+            review_handler = _step_review_handlers.get(user_id)
+            if step.get("checkpoint") and self._is_valid_result(r) and review_handler:
                 _emit(on_event, {"type": "step_preview", "index": i, "name": step["name"]})
-                review = await asyncio.to_thread(_step_review_handler, step["name"], r)
+                review = await asyncio.to_thread(review_handler, step["name"], r)
                 if review.get("action") == "redo":
                     logger.info("[Checkpoint] 步骤%d 用户要求按反馈重做", i)
                     feedback = str(review.get("feedback", ""))[:800]

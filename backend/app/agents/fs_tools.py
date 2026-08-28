@@ -78,8 +78,8 @@ DANGEROUS_PATTERNS = [
     re.compile(r"git\s+push\s+.*(--force|-f)", re.IGNORECASE),  # 强推
 ]
 
-# 人工确认回调（由 chat.py 在 WS 连接时注入；None 表示无确认通道）
-_confirm_handler = None
+# 人工确认回调（由 chat.py 在 WS 连接时注入；按 user_id 隔离，支持多用户并发）
+_confirm_handlers: dict[int, callable] = {}
 
 # 敏感文件黑名单关键词（大小写不敏感，命中即拒绝读写/删除/移动）
 SENSITIVE_FILE_KEYWORDS = [
@@ -90,10 +90,18 @@ SENSITIVE_FILE_KEYWORDS = [
 ]
 
 
-def set_confirm_handler(fn):
-    """注入确认回调：fn(prompt) -> bool，True=允许，False=拒绝"""
-    global _confirm_handler
-    _confirm_handler = fn
+def set_confirm_handler(fn, user_id=None):
+    """注入确认回调：fn(command, user_id, prompt) -> bool，True=允许，False=拒绝。
+    user_id 不为 None 时按用户注册（支持多用户并发）；为 None 时清除全局。"""
+    if user_id is not None:
+        _confirm_handlers[user_id] = fn
+    else:
+        _confirm_handlers.clear()
+
+
+def remove_confirm_handler(user_id):
+    """用户断开连接时移除回调"""
+    _confirm_handlers.pop(user_id, None)
 
 
 def _needs_confirmation(command: str) -> bool:
@@ -307,10 +315,11 @@ def _read_external_file(user_id: int, raw_path: str) -> str:
     first_time = not _dir_authorized(user_id, directory)
     if first_time:
         # 需要用户授权：走人工确认回调
-        if _confirm_handler is None:
+        handler = _confirm_handlers.get(user_id)
+        if handler is None:
             raise PermissionError("读取工作区外文件需要用户确认，但当前连接没有确认通道")
         display_dir = os.path.basename(directory) or directory
-        allowed = _confirm_handler(
+        allowed = handler(
             f"read_external {full}", user_id,
             f"Agent 请求读取工作区外的文件：\n{full}\n\n"
             f"允许后将授权整个目录「{display_dir}」的读取权限（本次会话内有效），是否允许？",
@@ -350,10 +359,11 @@ def _run_command(user_id: int, command: str) -> str:
 
     # 人工确认：高危特征或非安全命令 → 必须用户批准才执行
     if _needs_confirmation(str(command)):
-        if _confirm_handler is None:
+        handler = _confirm_handlers.get(user_id)
+        if handler is None:
             return "该命令需要人工确认，但当前连接没有确认通道，已取消执行"
         try:
-            allowed = _confirm_handler(command, user_id, f"Agent 请求执行命令，是否允许？\n$ {command}")
+            allowed = handler(command, user_id, f"Agent 请求执行命令，是否允许？\n$ {command}")
         except Exception:
             allowed = False
         if not allowed:

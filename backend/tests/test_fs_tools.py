@@ -126,21 +126,22 @@ def test_high_risk_command_requires_confirmation(ws):
 def test_confirm_handler_approve(ws, monkeypatch):
     """确认回调返回 True → 命令执行"""
     fs_tools._write_file(7, "p.py", "print('approved')")
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: True)
+    fs_tools.set_confirm_handler(lambda cmd, uid, prompt: True, user_id=7)
     out = fs_tools._run_command(7, f"{PY_CMD} p.py")
     assert "approved" in out
+    fs_tools.remove_confirm_handler(7)
 
 
 def test_confirm_handler_deny(ws, monkeypatch):
     """确认回调返回 False → 命令被拒绝"""
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda prompt: False)
+    fs_tools.set_confirm_handler(lambda cmd, uid, prompt: False, user_id=7)
     out = fs_tools._run_command(7, "git push --force origin main")
     assert "拒绝" in out
+    fs_tools.remove_confirm_handler(7)
 
 
 def test_confirm_handler_clear_after_use(ws, monkeypatch):
-    """确认回调为 None → 高危命令直接取消"""
-    monkeypatch.setattr(fs_tools, "_confirm_handler", None)
+    """确认回调为空 → 高危命令直接取消"""
     out = fs_tools._run_command(7, "git push --force origin main")
     assert "确认通道" in out
 
@@ -155,7 +156,6 @@ def test_read_external_denied_without_confirm(tmp_path, monkeypatch):
     """无确认通道 → 拒绝读取外部文件"""
     f = tmp_path / "outside.py"
     f.write_text("print('hello')", encoding="utf-8")
-    monkeypatch.setattr(fs_tools, "_confirm_handler", None)
     with pytest.raises(PermissionError):
         fs_tools._read_external_file(9, str(f))
 
@@ -164,10 +164,11 @@ def test_read_external_user_rejects(tmp_path, monkeypatch):
     """用户拒绝 → 拒绝读取，且不产生授权"""
     f = tmp_path / "secret_code.py"
     f.write_text("x = 1", encoding="utf-8")
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: False)
+    fs_tools.set_confirm_handler(lambda cmd, uid, prompt: False, user_id=9)
     with pytest.raises(PermissionError):
         fs_tools._read_external_file(9, str(f))
     assert not fs_tools._dir_authorized(9, str(tmp_path))
+    fs_tools.remove_confirm_handler(9)
 
 
 def test_read_external_authorized_once(tmp_path, monkeypatch):
@@ -183,25 +184,27 @@ def test_read_external_authorized_once(tmp_path, monkeypatch):
     def fake_confirm(cmd, uid, prompt):
         calls.append(prompt)
         return True
-    monkeypatch.setattr(fs_tools, "_confirm_handler", fake_confirm)
+    fs_tools.set_confirm_handler(fake_confirm, user_id=9)
 
     out = fs_tools._read_external_file(9, str(f1))
     assert "a = 1" in out and len(calls) == 1          # 首次询问
 
     out2 = fs_tools._read_external_file(9, str(f3))
     assert "# b" in out2 and len(calls) == 1          # 子目录同根，不再询问
+    fs_tools.remove_confirm_handler(9)
 
 
 def test_read_ext_dirs_cleared_on_disconnect(tmp_path, monkeypatch):
     """断开连接 → 授权清空，下次需重新确认"""
     f = tmp_path / "x.py"
     f.write_text("x = 2", encoding="utf-8")
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: True)
+    fs_tools.set_confirm_handler(lambda cmd, uid, prompt: True, user_id=11)
     fs_tools._read_external_file(11, str(f))
     assert fs_tools._dir_authorized(11, str(tmp_path))
 
     fs_tools.clear_ext_dirs(11)
     assert not fs_tools._dir_authorized(11, str(tmp_path))
+    fs_tools.remove_confirm_handler(11)
 
 
 def test_read_external_unsupported_type(tmp_path):
@@ -216,7 +219,8 @@ def test_read_external_sensitive_still_blocked(tmp_path, monkeypatch):
     """.env 等敏感文件即使在已授权目录也拒绝"""
     f = tmp_path / ".env.production"
     f.write_text("SECRET=1", encoding="utf-8")
-    monkeypatch.setattr(fs_tools, "_confirm_handler", lambda cmd, uid, prompt: True)
+    fs_tools.set_confirm_handler(lambda cmd, uid, prompt: True, user_id=13)
     fs_tools._authorize_dir(13, str(tmp_path))         # 预先授权目录
     with pytest.raises(ValueError):
         fs_tools._read_external_file(13, str(f))
+    fs_tools.remove_confirm_handler(13)

@@ -691,7 +691,7 @@ def build_tools(user_id: int) -> list:
     def delete_file(file_path: str) -> str:
         """删除工作区内的文件或空目录。参数 file_path（工作区内相对路径）"""
         try:
-            if not _user_confirm(fs_tools._confirm_handler, f"delete_file {file_path}", user_id,
+            if not _user_confirm(fs_tools._confirm_handlers.get(user_id), f"delete_file {file_path}", user_id,
                                  f"Agent 请求删除文件「{file_path}」，是否允许？"):
                 return "已取消（删除操作需人工确认）"
             return fs_tools._delete(user_id, file_path)
@@ -703,7 +703,7 @@ def build_tools(user_id: int) -> list:
     def move_file(src_path: str, dst_path: str) -> str:
         """移动或重命名工作区内文件。参数 src_path（源相对路径）、dst_path（目标相对路径）"""
         try:
-            if not _user_confirm(fs_tools._confirm_handler, f"move_file {src_path} {dst_path}", user_id,
+            if not _user_confirm(fs_tools._confirm_handlers.get(user_id), f"move_file {src_path} {dst_path}", user_id,
                                  f"Agent 请求移动文件「{src_path}」→「{dst_path}」，是否允许？"):
                 return "已取消（移动操作需人工确认）"
             return fs_tools._move(user_id, src_path, dst_path)
@@ -715,7 +715,7 @@ def build_tools(user_id: int) -> list:
     def run_command(command: str) -> str:
         """在授权工作区目录内执行白名单命令（python/pip/git/node/npm 等，shell 命令如 ls 不可用）。参数 command（完整命令字符串，如 'python scripts/demo.py'）"""
         try:
-            if not _user_confirm(fs_tools._confirm_handler, f"run_command {command}", user_id,
+            if not _user_confirm(fs_tools._confirm_handlers.get(user_id), f"run_command {command}", user_id,
                                  f"Agent 请求执行命令，是否允许？\n$ {command}"):
                 return "已取消（命令执行需人工确认）"
             return _truncate(fs_tools._run_command(user_id, command))
