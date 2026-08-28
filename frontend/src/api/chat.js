@@ -34,7 +34,7 @@ export class ChatClient {
 
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const token = localStorage.getItem('token') || ''
+      const token = sessionStorage.getItem('token') || ''
       this.url = `${protocol}//${window.location.host}/api/chat/ws?token=${encodeURIComponent(token)}`
       this.ws = new WebSocket(this.url)
     } catch (e) {
@@ -73,8 +73,8 @@ export class ChatClient {
       // 401：token 失效，停止重连并回登录页
       if (event.code === 4401) {
         this._onError?.('登录已过期，请重新登录')
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('user')
         if (window.location.pathname !== '/login') window.location.href = '/login'
         return
       }

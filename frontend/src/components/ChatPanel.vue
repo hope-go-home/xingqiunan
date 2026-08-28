@@ -24,6 +24,7 @@ const loadingHistory = ref(false)
 const connStatus = ref('idle')
 const connError = ref('')
 const currentSessionId = ref('')
+const runningSessionId = ref(null)   // 正在执行 Agent 的会话（切走时后台继续，UI 不串台）
 const pendingConfirm = ref(null)
 const allowForSession = ref(false)
 const pendingReview = ref(null)   // 检查点审查 {id, step, preview}
@@ -59,6 +60,15 @@ function fmtArgs(args) {
 }
 
 function handleChunk(chunk) {
+  // 后台会话的 Agent 事件：切走时不污染当前会话 UI，仅复位状态（数据已在服务端落库）
+  if (runningSessionId.value && currentSessionId.value !== runningSessionId.value) {
+    if (chunk.done || chunk.type === 'agent_stopped') {
+      sending.value = false
+      runningSessionId.value = null
+      loadSessions()
+    }
+    return
+  }
   // 长程规划：展示整体计划与当前步骤
   if (chunk.type === 'plan') {
     toolLog.value.push(`🧭 长程规划：${(chunk.steps || []).map((s, i) => `${i + 1}. ${s}`).join('  |  ')}`)
@@ -116,6 +126,7 @@ function handleChunk(chunk) {
       if (!last.content) last.content = '⏹ 已停止'
     }
     sending.value = false
+    runningSessionId.value = null
     return
   }
   const last = messages.value[messages.value.length - 1]
@@ -131,6 +142,7 @@ function handleChunk(chunk) {
       last.webSearch = webSearchUsed.value
     }
     sending.value = false
+    runningSessionId.value = null
     webSearchUsed.value = false
     loadSessions()
   }
@@ -147,6 +159,7 @@ function send(text) {
   webSearchUsed.value = false
   if (!text) input.value = ''
   sending.value = true; showMenu.value = false
+  runningSessionId.value = currentSessionId.value
 
   // user_id 不再传给后端：服务端从 WS 握手时的 JWT 解析
   getClient().send({ message: msg, use_agent: useAgent.value, web_search: useWebSearch.value, use_planning: usePlanning.value, session_id: currentSessionId.value })
@@ -182,7 +195,6 @@ async function loadSessions() {
   finally { loadingSessions.value = false }
 }
 async function selectSession(sid) {
-  if (sending.value) return
   loadingHistory.value = true
   currentSessionId.value = sid
   toolLog.value = []
