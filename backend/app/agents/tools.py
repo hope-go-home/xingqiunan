@@ -25,6 +25,9 @@ from app.core.config import (
     LLM_MODEL,
     BOCHA_API_KEY,
     LOG_DIR,
+    VISION_MODEL,
+    ASR_MODEL,
+    REALTIME_ASR_MODEL,
 )
 
 # 工具输出最大长度（字符），超出截断，防止工具结果撑爆上下文
@@ -464,7 +467,7 @@ def _call_vision_model(user_id: int, image_path: str, prompt: str) -> str:
             b64 = base64.b64encode(f.read()).decode("utf-8")
         image_payload = {"url": f"data:{mime};base64,{b64}"}
 
-    return _call_vision_api("qwen-vl-plus", [{
+    return _call_vision_api(VISION_MODEL, [{
         "role": "user",
         "content": [
             {"type": "image_url", "image_url": image_payload},
@@ -501,7 +504,7 @@ def _asr_submit_url(key: str, audio_url: str):
     return requests.post(
         "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": "paraformer-v1", "input": {"file_urls": [audio_url]}},
+        json={"model": ASR_MODEL, "input": {"file_urls": [audio_url]}},
         timeout=30,
     )
 
@@ -527,7 +530,7 @@ def _asr_transcribe_file(key: str, full: str):
         max_retries=1,
     )
     with open(full, "rb") as f:
-        resp = client.audio.transcriptions.create(model="paraformer-v1", file=f)
+        resp = client.audio.transcriptions.create(model=ASR_MODEL, file=f)
     return getattr(resp, "text", "") or ""
 
 
