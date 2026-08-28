@@ -21,7 +21,7 @@ from langchain_openai import ChatOpenAI
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, REDIS_URL, ALLOWED_ORIGINS
+from app.core.config import LLM_MODEL, DASHSCOPE_API_KEY, REDIS_URL, ALLOWED_ORIGINS, REALTIME_ASR_MODEL
 from app.core.database import get_db, async_session
 from app.core.security import decode_access_token, get_current_user_id
 from app.core.cost_guard import CostLimitExceeded
@@ -659,3 +659,140 @@ async def websocket_chat(websocket: WebSocket):
         mcp_agent_mod.remove_plan_confirm_handler(int(user_id))
         mcp_agent_mod.remove_step_review_handler(int(user_id))
         manager.disconnect(user_id)
+
+
+@router.websocket("/ws/asr")
+async def websocket_asr(websocket: WebSocket):
+    """实时语音识别 WebSocket：前端音频流 → 后端转发到 DashScope → 返回识别结果"""
+    # 1. Origin 校验
+    origin = websocket.headers.get("origin")
+    if origin and origin not in ALLOWED_ORIGINS:
+        await websocket.close(code=4403, reason="Origin not allowed")
+        return
+
+    # 2. token 认证
+    user_id = decode_access_token(websocket.query_params.get("token", ""))
+    if user_id is None:
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
+
+    await websocket.accept()
+    logger.info(f"ASR WebSocket connected: user={user_id}")
+
+    # 3. 连接 DashScope WebSocket
+    import websockets
+    from app.core.config import REALTIME_ASR_MODEL
+
+    dashscope_ws_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+    dashscope_headers = {
+        "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
+        "user-agent": "TaskBench/1.0",
+    }
+
+    try:
+        async with websockets.connect(dashscope_ws_url, extra_headers=dashscope_headers) as ds_ws:
+            # 4. 发送 run-task 指令
+            task_id = str(uuid.uuid4())
+            run_task_msg = {
+                "header": {
+                    "action": "run-task",
+                    "task_id": task_id,
+                    "streaming": "duplex",
+                },
+                "payload": {
+                    "task_group": "audio",
+                    "task": "asr",
+                    "function": "recognition",
+                    "model": REALTIME_ASR_MODEL,
+                    "parameters": {
+                        "format": "pcm",
+                        "sample_rate": 16000,
+                        "disfluency_removal_enabled": False,
+                        "language_hints": ["zh", "en"],
+                    },
+                    "input": {},
+                },
+            }
+            await ds_ws.send(json.dumps(run_task_msg))
+
+            # 5. 等待 task-started 事件
+            while True:
+                msg = await ds_ws.recv()
+                data = json.loads(msg)
+                if data.get("header", {}).get("action") == "task-started":
+                    logger.info(f"DashScope ASR task started: {task_id}")
+                    break
+                elif data.get("header", {}).get("action") == "task-finished":
+                    break
+
+            # 6. 转发前端音频流到 DashScope，并返回识别结果
+            async def forward_audio():
+                """从前端接收音频并转发到 DashScope"""
+                try:
+                    while True:
+                        data = await websocket.receive_bytes()
+                        await ds_ws.send(data)
+                except WebSocketDisconnect:
+                    pass
+                except Exception as e:
+                    logger.error(f"Forward audio error: {e}")
+
+            async def receive_results():
+                """从 DashScope 接收识别结果并返回给前端"""
+                try:
+                    while True:
+                        msg = await ds_ws.recv()
+                        data = json.loads(msg)
+                        action = data.get("header", {}).get("action")
+
+                        if action == "result-generated":
+                            output = data.get("payload", {}).get("output", {})
+                            result = output.get("result", "")
+                            if result:
+                                await websocket.send_json({
+                                    "type": "asr_result",
+                                    "text": result,
+                                    "is_final": output.get("is_final", False),
+                                })
+                        elif action == "task-finished":
+                            await websocket.send_json({
+                                "type": "asr_result",
+                                "text": "",
+                                "is_final": True,
+                            })
+                            break
+                except Exception as e:
+                    logger.error(f"Receive results error: {e}")
+
+            # 7. 并发运行：转发音频 + 接收结果
+            await asyncio.gather(forward_audio(), receive_results())
+
+            # 8. 发送 finish-task
+            finish_task_msg = {
+                "header": {
+                    "action": "finish-task",
+                    "task_id": task_id,
+                    "streaming": "duplex",
+                },
+                "payload": {"input": {}},
+            }
+            await ds_ws.send(json.dumps(finish_task_msg))
+
+            # 9. 等待 task-finished
+            while True:
+                msg = await ds_ws.recv()
+                data = json.loads(msg)
+                if data.get("header", {}).get("action") == "task-finished":
+                    break
+
+    except Exception as e:
+        logger.error(f"DashScope ASR error: {e}")
+        try:
+            await websocket.send_json({
+                "type": "asr_error",
+                "message": f"语音识别服务错误: {str(e)}",
+            })
+        except Exception:
+            pass
+    finally:
+        logger.info(f"ASR WebSocket disconnected: user={user_id}")

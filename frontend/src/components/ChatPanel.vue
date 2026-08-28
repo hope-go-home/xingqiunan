@@ -32,6 +32,8 @@ const reviewFeedback = ref('')
 const showSkills = ref(false)
 const skills = ref([])
 const loadingSkills = ref(false)
+const isRecording = ref(false)
+const asrResult = ref('')
 
 // 会话列表
 const sessions = ref([])
@@ -252,6 +254,119 @@ function selectSkill(s) {
   nextTick(() => { document.querySelector('.chat-input')?.focus() })
 }
 
+// 实时语音识别
+let mediaRecorder = null
+let asrWs = null
+let audioContext = null
+let recorderProcessor = null
+
+async function toggleRecording() {
+  if (isRecording.value) {
+    stopRecording()
+    return
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    audioContext = new AudioContext({ sampleRate: 16000 })
+    const source = audioContext.createMediaStreamSource(stream)
+
+    // 连接到后端 ASR WebSocket
+    const token = userStore.token
+    const wsUrl = `ws://${window.location.host}/chat/ws/asr?token=${token}`
+    asrWs = new WebSocket(wsUrl)
+
+    asrWs.onopen = () => {
+      console.log('ASR WebSocket connected')
+      isRecording.value = true
+      asrResult.value = ''
+    }
+
+    asrWs.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'asr_result') {
+        if (data.is_final) {
+          // 最终结果：追加到输入框
+          input.value += data.text
+          asrResult.value = ''
+        } else {
+          // 中间结果：显示在录音按钮旁边
+          asrResult.value = data.text
+        }
+      } else if (data.type === 'asr_error') {
+        console.error('ASR error:', data.message)
+        stopRecording()
+      }
+    }
+
+    asrWs.onclose = () => {
+      console.log('ASR WebSocket closed')
+      if (isRecording.value) stopRecording()
+    }
+
+    asrWs.onerror = (e) => {
+      console.error('ASR WebSocket error:', e)
+      stopRecording()
+    }
+
+    // 使用 ScriptProcessorNode 处理音频
+    const bufferSize = 4096
+    recorderProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1)
+
+    recorderProcessor.onaudioprocess = (e) => {
+      if (!isRecording.value || !asrWs || asrWs.readyState !== WebSocket.OPEN) return
+
+      // 获取 PCM 数据
+      const inputData = e.inputBuffer.getChannelData(0)
+
+      // 转换为 16-bit PCM
+      const pcmData = new Int16Array(inputData.length)
+      for (let i = 0; i < inputData.length; i++) {
+        const s = Math.max(-1, Math.min(1, inputData[i]))
+        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+      }
+
+      // 发送到后端
+      asrWs.send(pcmData.buffer)
+    }
+
+    source.connect(recorderProcessor)
+    recorderProcessor.connect(audioContext.destination)
+
+    // 保存流引用以便停止
+    mediaRecorder = { stream }
+
+  } catch (e) {
+    console.error('Microphone access error:', e)
+    alert('无法访问麦克风，请检查浏览器权限设置')
+  }
+}
+
+function stopRecording() {
+  isRecording.value = false
+  asrResult.value = ''
+
+  if (recorderProcessor) {
+    recorderProcessor.disconnect()
+    recorderProcessor = null
+  }
+
+  if (audioContext) {
+    audioContext.close()
+    audioContext = null
+  }
+
+  if (asrWs) {
+    asrWs.close()
+    asrWs = null
+  }
+
+  if (mediaRecorder?.stream) {
+    mediaRecorder.stream.getTracks().forEach(track => track.stop())
+    mediaRecorder = null
+  }
+}
+
 function respondConfirm(allow) {
   if (!pendingConfirm.value) return
   getClient().send({ type: 'confirm_response', id: pendingConfirm.value.id, allow, allow_for_session: allowForSession.value })
@@ -468,6 +583,10 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
             <label class="plus-item"><span class="plus-icon">▣</span>上传文档<input type="file" accept=".pdf,.docx,.doc,.txt,.md,.json,.csv" hidden @change="onPickDoc" /></label>
           </div>
         </div>
+        <button :class="['btn', 'mic-btn', { recording: isRecording }]" @click="toggleRecording">
+          {{ isRecording ? '⏹' : '🎤' }}
+        </button>
+        <span v-if="asrResult" class="asr-result">{{ asrResult }}</span>
         <textarea v-model="input" class="chat-input" placeholder="输入消息… Enter 发送" rows="1" @keydown="onKeydown"></textarea>
         <button v-if="sending" class="btn btn-danger stop-btn" @click="stopReply">停止</button>
         <button v-else class="btn btn-primary send-btn" :disabled="!input.trim()" @click="send()">发送</button>
@@ -659,7 +778,7 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .tool-log-count { font-weight: 400; color: var(--slate); margin-left: 4px; }
 .tool-log-line { color: var(--ink); line-height: 1.7; word-break: break-all; }
 
-.chat-input-area { display: flex; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); flex-shrink: 0; align-items: flex-end; }
+.chat-input-area { display: flex; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); flex-shrink: 0; align-items: flex-end; position: relative; }
 .plus-area { position: relative; flex-shrink: 0; }
 .plus-btn { width: 42px; height: 42px; border-radius: var(--radius-sm); background: var(--steel); color: var(--slate); font-size: 22px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .plus-btn:hover { background: var(--border); color: var(--ink); }
@@ -672,4 +791,29 @@ onUnmounted(() => { client?.disconnect(); document.removeEventListener('click', 
 .chat-input::placeholder { color: var(--muted); }
 .send-btn { height: 42px; padding: 0 22px; flex-shrink: 0; }
 .stop-btn { height: 42px; padding: 0 16px; flex-shrink: 0; font-size: 13px; }
+
+/* 录音按钮 */
+.mic-btn {
+  width: 42px; height: 42px; border-radius: var(--radius-sm);
+  background: var(--steel); color: var(--slate); font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.mic-btn:hover { background: var(--border); color: var(--ink); }
+.mic-btn.recording {
+  background: var(--crimson); color: #fff;
+  animation: pulse-recording 1.5s ease-in-out infinite;
+}
+@keyframes pulse-recording {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+}
+
+/* ASR 实时结果显示 */
+.asr-result {
+  position: absolute; bottom: 50px; left: 60px; right: 100px;
+  background: var(--cobalt-bg); color: var(--cobalt); border: 1px solid var(--cobalt);
+  border-radius: var(--radius-sm); padding: 8px 12px; font-size: 13px;
+  max-height: 60px; overflow-y: auto; z-index: 10;
+}
 </style>
