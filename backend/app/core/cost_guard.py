@@ -12,7 +12,6 @@ from app.core.config import REDIS_URL, COST_DAILY_BUDGET
 logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "cost:user:"
-_LIMIT_HIT_PREFIX = "costlimit:user:"
 
 _redis = None
 

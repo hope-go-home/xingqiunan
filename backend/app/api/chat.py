@@ -13,7 +13,6 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
@@ -27,20 +26,12 @@ from app.core.security import decode_access_token, get_current_user_id
 from app.core.cost_guard import CostLimitExceeded
 from app.core.websocket_manager import manager
 from app.agents.mcp_agent import agent as mcp_agent
-from app.models.chat_message import ChatMessage
+from app.models.chat_message import ChatMessage, CN_TZ, now_cn
 from app.models.token_usage import TokenUsage
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["聊天"])
-
-# 北京时间 = UTC + 8
-CN_TZ = timezone(timedelta(hours=8))
-
-
-def now_cn():
-    return datetime.now(CN_TZ).replace(tzinfo=None)
-
 
 _llm = None
 

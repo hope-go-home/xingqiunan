@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-/** 24 项 Agent 工具（22 本地注册 + 2 MCP 协议） */
+/** 23 项 Agent 工具（21 本地注册 + 2 MCP 协议） */
 const tools = [
   {
     group: '文档',
@@ -89,7 +89,7 @@ const tools = [
       <button class="quick-card" @click="router.push('/chat')">
         <span class="qc-icon">◈</span>
         <span class="qc-label">AI 对话</span>
-        <span class="qc-desc">Agent 模式 · 24 项工具</span>
+        <span class="qc-desc">Agent 模式 · 23 项工具</span>
       </button>
       <button class="quick-card" @click="router.push('/knowledge')">
         <span class="qc-icon">▣</span>

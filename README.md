@@ -11,7 +11,7 @@ LLM 原生 function calling 驱动：分析需求 → 选择工具 → 执行 �
 | 层 | 方式 | 工具 |
 |----|------|------|
 | **MCP 协议层**（外部服务） | 本地 MCP Server（`app/agents/mcp_server.py`），Agent 经 `langchain-mcp-adapters` 连接 | `get_current_time`、`query_weather` |
-| **本地注册层**（用户态） | 闭包注入 `user_id`，天然多租户隔离 | `parse_document`、`list_directory`、`list_tasks`、`translate`、`create_task`、`search_knowledge`、`add_knowledge`、`analyze_image`、`ocr_image` |
+| **本地注册层**（用户态） | 闭包注入 `user_id`，天然多租户隔离 | `parse_document`、`list_directory`、`list_tasks`、`translate`、`create_task`、`search_knowledge`、`add_knowledge`、`analyze_image`、`ocr_image`、`web_search`、`write_file`、`read_file`、`list_workspace`、`create_directory`、`delete_file`、`move_file`、`run_command`、`read_project_file`、`install_skill`、`list_skills`、`load_skill` |
 
 - 最多 5 轮工具调用，60s 总超时，工具失败自动重试（ToolRetryMiddleware）
 - 工具结果统一截断（2000 字符），防止撑爆 LLM 上下文

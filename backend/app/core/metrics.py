@@ -1,6 +1,6 @@
 # Prometheus 可观测性指标：请求计数、LLM 耗时、工具成功率、费用累计
 
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Histogram
 
 # ─── HTTP 请求 ───
 

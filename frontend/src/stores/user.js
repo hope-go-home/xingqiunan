@@ -20,7 +20,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // ---- getters ----
-  const isLoggedIn = computed(() => !!token.value)
   const username = computed(() => user.value?.username || '')
 
   // ---- actions ----
@@ -46,5 +45,5 @@ export const useUserStore = defineStore('user', () => {
     sessionStorage.removeItem('user')
   }
 
-  return { token, user, isLoggedIn, username, loginAction, registerAction, logout }
+  return { token, user, username, loginAction, registerAction, logout }
 })

@@ -225,7 +225,6 @@ def _render_plan_markdown(user_input: str, plan: list[dict]) -> str:
 def _llm_invoke(llm, prompt: str):
     """带重试+熔断的 LLM 同步调用 + Prometheus 指标"""
     from app.core.metrics import llm_calls_total, llm_call_duration_seconds, llm_tokens_total
-    import time
     start = time.time()
     try:
         resp = llm.invoke(prompt)
