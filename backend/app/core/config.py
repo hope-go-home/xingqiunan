@@ -34,11 +34,6 @@ LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.7-plus")
 # === 视觉模型 ===
 VISION_MODEL = os.getenv("VISION_MODEL", "qwen-vl-plus")
 
-# === 语音识别模型 ===
-ASR_MODEL = os.getenv("ASR_MODEL", "paraformer-v1")
-REALTIME_ASR_MODEL = os.getenv("REALTIME_ASR_MODEL", "paraformer-realtime-v2")
-WORKSPACE_ID = os.getenv("WORKSPACE_ID", "")
-
 # === 备用 LLM（故障转移）===
 LLM_FALLBACK_MODEL = os.getenv("LLM_FALLBACK_MODEL", "deepseek-v4-flash")
 LLM_FALLBACK_API_KEY = os.getenv("LLM_FALLBACK_API_KEY", "")
