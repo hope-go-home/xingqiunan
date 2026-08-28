@@ -521,7 +521,9 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
         else:
             full = _safe_path(user_id, audio_input)
             with open(full, "rb") as f:
-                submit_resp = _asr_submit_file(key, f)
+                # requests 需要文件名来判断 MIME 类型
+                filename = os.path.basename(full)
+                submit_resp = _asr_submit_file(key, (filename, f))
 
         task_data = submit_resp.json()
         if not task_data.get("output"):
