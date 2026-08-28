@@ -38,7 +38,6 @@ const tools = [
     items: [
       { name: 'analyze_image',         label: '图片分析',   desc: '传入图片 URL 或本地路径，视觉模型识别场景、物体、人物、氛围、颜色等信息' },
       { name: 'ocr_image',             label: 'OCR 文字提取', desc: '传入图片，提取图中的所有文字，支持截图、扫描件、照片。本地文件自动转 base64 上传' },
-      { name: 'speech_to_text',        label: '语音转文字', desc: '传入音频 URL 或本地路径，Paraformer 模型异步识别并返回文字。本地文件自动 multipart 上传' },
     ],
   },
   {
