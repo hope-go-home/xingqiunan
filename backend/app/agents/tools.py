@@ -507,18 +507,6 @@ def _asr_submit_url(key: str, audio_url: str):
 
 
 @resilient_call("dashscope")
-def _asr_submit_file(key: str, file_obj):
-    """带重试+熔断的 ASR 提交（文件模式，走录音文件识别端点）"""
-    return requests.post(
-        "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription",
-        headers={"Authorization": f"Bearer {key}"},
-        data={"model": "paraformer-v1"},
-        files={"file": file_obj},
-        timeout=60,
-    )
-
-
-@resilient_call("dashscope")
 def _asr_poll(key: str, task_id: str):
     """带重试+熔断的 ASR 轮询"""
     return requests.get(
@@ -526,6 +514,21 @@ def _asr_poll(key: str, task_id: str):
         headers={"Authorization": f"Bearer {key}"},
         timeout=10,
     )
+
+
+@resilient_call("dashscope")
+def _asr_transcribe_file(key: str, full: str):
+    """带重试+熔断的本地文件转写（OpenAI 兼容接口，同步返回文字）"""
+    from openai import OpenAI
+    client = OpenAI(
+        api_key=key,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        timeout=120.0,
+        max_retries=1,
+    )
+    with open(full, "rb") as f:
+        resp = client.audio.transcriptions.create(model="paraformer-v1", file=f)
+    return getattr(resp, "text", "") or ""
 
 
 def _speech_to_text(user_id: int, audio_input: str) -> str:
@@ -543,40 +546,39 @@ def _speech_to_text(user_id: int, audio_input: str) -> str:
             if not ok:
                 return f"URL 被安全策略拒绝（SSRF 防护）: {reason}"
             submit_resp = _asr_submit_url(key, audio_input)
+            task_data = submit_resp.json()
+            if not task_data.get("output"):
+                return f"提交语音识别失败: {task_data}"
+            task_id = task_data["output"]["task_id"]
+            for _ in range(30):
+                if is_stopped(user_id):
+                    return "识别已停止（用户中断）"
+                poll_resp = _asr_poll(key, task_id)
+                poll_data = poll_resp.json()
+                status = poll_data.get("output", {}).get("task_status", "")
+
+                if status == "SUCCEEDED":
+                    results = poll_data["output"].get("results", [])
+                    texts = []
+                    for r in results:
+                        for sentence in r.get("sentences", []):
+                            texts.append(sentence.get("text", ""))
+                    full_text = "\n".join(texts)
+                    return full_text if full_text else "识别完成，但未提取到文字"
+
+                if status == "FAILED":
+                    return f"语音识别失败: {poll_data.get('output', {})}"
+
+                time.sleep(2)
+
+            return "语音识别超时，请稍后重试"
         else:
+            # 本地文件：走 OpenAI 兼容接口，同步返回文字
             full = _safe_path(user_id, audio_input)
-            with open(full, "rb") as f:
-                # requests 需要文件名来判断 MIME 类型
-                filename = os.path.basename(full)
-                submit_resp = _asr_submit_file(key, (filename, f))
-
-        task_data = submit_resp.json()
-        if not task_data.get("output"):
-            return f"提交语音识别失败: {task_data}"
-
-        task_id = task_data["output"]["task_id"]
-        for _ in range(30):
-            if is_stopped(user_id):
-                return "识别已停止（用户中断）"
-            poll_resp = _asr_poll(key, task_id)
-            poll_data = poll_resp.json()
-            status = poll_data.get("output", {}).get("task_status", "")
-
-            if status == "SUCCEEDED":
-                results = poll_data["output"].get("results", [])
-                texts = []
-                for r in results:
-                    for sentence in r.get("sentences", []):
-                        texts.append(sentence.get("text", ""))
-                full_text = "\n".join(texts)
-                return full_text if full_text else "识别完成，但未提取到文字"
-
-            if status == "FAILED":
-                return f"语音识别失败: {poll_data.get('output', {})}"
-
-            time.sleep(2)
-
-        return "语音识别超时，请稍后重试"
+            if not os.path.exists(full):
+                return f"文件不存在: {audio_input}"
+            text = _asr_transcribe_file(key, full)
+            return text.strip() if text.strip() else "识别完成，但未提取到文字"
     except requests.RequestException as e:
         return f"网络请求失败: {e}"
     except Exception as e:
